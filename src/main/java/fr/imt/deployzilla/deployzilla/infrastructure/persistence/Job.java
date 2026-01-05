@@ -8,13 +8,12 @@ import java.util.UUID;
 @Data
 public class Job {
 
-    private String id; // UUID generated at creation
+    private String id;
     private String scriptName;
-    private String status; // PENDING, RUNNING, SUCCESS, FAILED
+    private String status;
     private LocalDateTime startTime;
     private LocalDateTime endTime;
 
-    // We store a reference to the log document, not the log itself
     private String logId;
 
     public Job(String scriptName) {

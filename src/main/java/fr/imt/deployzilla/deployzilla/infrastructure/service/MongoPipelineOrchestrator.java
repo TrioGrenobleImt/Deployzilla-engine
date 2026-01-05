@@ -5,6 +5,7 @@ import fr.imt.deployzilla.deployzilla.infrastructure.ProcessResult;
 import fr.imt.deployzilla.deployzilla.infrastructure.persistence.Job;
 import fr.imt.deployzilla.deployzilla.infrastructure.persistence.Pipeline;
 import fr.imt.deployzilla.deployzilla.infrastructure.persistence.repository.PipelineRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -14,16 +15,11 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
 @Service
+@RequiredArgsConstructor
 public class MongoPipelineOrchestrator {
 
     private final PipelineRepository pipelineRepository;
-    private final BashExecutor bashExecutor; // Reusing your engine
-
-    public MongoPipelineOrchestrator(PipelineRepository pipelineRepository,
-                                     BashExecutor bashExecutor) {
-        this.pipelineRepository = pipelineRepository;
-        this.bashExecutor = bashExecutor;
-    }
+    private final BashExecutor bashExecutor;
 
     /**
      * Create the pipeline structure
@@ -41,7 +37,6 @@ public class MongoPipelineOrchestrator {
      */
     @Async
     public void runPipeline(String pipelineId) throws ExecutionException, InterruptedException {
-        // 1. Fetch the WHOLE pipeline
         Pipeline pipeline = pipelineRepository.findById(pipelineId)
                 .orElseThrow(() -> new RuntimeException("Not Found"));
 
@@ -50,23 +45,19 @@ public class MongoPipelineOrchestrator {
 
         boolean chainBroken = false;
 
-        // 2. Iterate through the embedded jobs
         for (Job job : pipeline.getJobs()) {
             if (chainBroken) {
                 job.setStatus("SKIPPED");
                 continue;
             }
 
-            // A. Update Status to RUNNING
             job.setStartTime(LocalDateTime.now());
             job.setStatus("RUNNING");
-            // We save the pipeline to persist the "RUNNING" state of this specific job
+
             pipelineRepository.save(pipeline);
 
-            // B. Execute Script
-            CompletableFuture<ProcessResult> result = bashExecutor.executeScript(job.getScriptName(), job.getId());
+            CompletableFuture<ProcessResult> result = bashExecutor.executeScript(job.getId(), job.getScriptName());
 
-            // D. Update Job Completion Status
             job.setEndTime(LocalDateTime.now());
 
             if (result.get().exitCode() == 0) {
@@ -77,7 +68,6 @@ public class MongoPipelineOrchestrator {
                 pipeline.setStatus("FAILED");
             }
 
-            // Save the state after every job
             pipelineRepository.save(pipeline);
         }
 

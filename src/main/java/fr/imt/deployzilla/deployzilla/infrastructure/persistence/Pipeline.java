@@ -12,12 +12,10 @@ import java.util.ArrayList;
 public class Pipeline {
 
     @Id
-    private String id; // UUID String
+    private String id;
 
-    private String status; // PENDING, RUNNING, SUCCESS, FAILED
+    private String status;
 
-    // EMBEDDED LIST: No separate collection for jobs.
-    // They are part of the Pipeline document.
     private List<Job> jobs = new ArrayList<>();
 
     public Pipeline() {

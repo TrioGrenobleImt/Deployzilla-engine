@@ -7,5 +7,10 @@ spring:
       port: 6379
       password: admin
       timeout: 60000
+    mongodb:
+  mongodb:
+    host: localhost
+    port: 27017
+    database: deployzilla
 server:
   port: 8081
