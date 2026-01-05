@@ -1,16 +1,17 @@
 package fr.imt.deployzilla.deployzilla.business.service;
 
 import fr.imt.deployzilla.deployzilla.configuration.RedisConfiguration;
+import fr.imt.deployzilla.deployzilla.infrastructure.ProcessResult;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.file.Path;
+import java.util.concurrent.CompletableFuture;
 
 @Service
 @RequiredArgsConstructor
@@ -19,11 +20,8 @@ public class BashExecutor {
     private final StringRedisTemplate redisTemplate;
 
     @Async
-    public void executeScript(String pipelineId, String scriptName) {
+    public CompletableFuture<ProcessResult> executeScript(String pipelineId, String scriptName) {
         try {
-            // We publish a JSON structure or a formatted string so the subscriber knows
-            // WHICH pipeline this log belongs to.
-            // Format: "pipelineId|logMessage"
             publishLog(pipelineId, "--- Pipeline Started ---");
 
             Path scriptPath = new ClassPathResource("scripts/" + scriptName).getFile().toPath();
@@ -41,14 +39,16 @@ public class BashExecutor {
 
             int exitCode = process.waitFor();
             publishLog(pipelineId, "--- Finished (Exit: " + exitCode + ") ---");
+            return CompletableFuture.completedFuture(new ProcessResult(0, "SUCCESS"));
+
 
         } catch (Exception e) {
             publishLog(pipelineId, "ERROR: " + e.getMessage());
+            return CompletableFuture.completedFuture(new ProcessResult(1, "ERROR"));
         }
     }
 
     private void publishLog(String pipelineId, String message) {
-        // Simple protocol: "ID|MESSAGE"
         String payload = pipelineId + "|" + message;
         redisTemplate.convertAndSend(RedisConfiguration.LOGS_TOPIC, payload);
     }

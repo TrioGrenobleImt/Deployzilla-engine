@@ -17,7 +17,7 @@ public class PipelineController {
 
     @PostMapping("/{id}/start")
     public ResponseEntity<String> startPipeline(@PathVariable String id) {
-        bashExecutor.executeScript("scripts/test.sh", id);
+        bashExecutor.executeScript(id, "test.sh");
         return ResponseEntity.ok("Pipeline " + id + " started.");
     }
 
