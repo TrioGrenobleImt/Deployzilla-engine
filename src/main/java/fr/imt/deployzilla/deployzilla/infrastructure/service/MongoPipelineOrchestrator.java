@@ -10,6 +10,7 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -27,7 +28,7 @@ public class MongoPipelineOrchestrator {
     public Pipeline createPipeline(List<String> scripts) {
         Pipeline pipeline = new Pipeline();
         for (String script : scripts) {
-            pipeline.addJob(new Job(script));
+            pipeline.addJob(new Job(script, Collections.emptyList()));
         }
         return pipelineRepository.save(pipeline);
     }
