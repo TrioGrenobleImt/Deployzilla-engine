@@ -24,7 +24,14 @@ public class BashExecutor {
         try {
             publishLog(pipelineId, "--- Pipeline Started ---");
 
-            Path scriptPath = new ClassPathResource("scripts/" + scriptName).getFile().toPath();
+            Path scriptPath;
+            Path externalPath = Path.of("/app/scripts", scriptName);
+            if (externalPath.toFile().exists()) {
+                scriptPath = externalPath;
+            } else {
+                scriptPath = new ClassPathResource("scripts/" + scriptName).getFile().toPath();
+            }
+            
             ProcessBuilder pb = new ProcessBuilder("bash", scriptPath.toString());
             pb.redirectErrorStream(true);
 
