@@ -2,14 +2,14 @@ services:
   app:
     build: .
     ports:
-      - "8081:8081"
+      - '8081:8081'
     environment:
       - SPRING_DATA_REDIS_HOST=redis
       - SPRING_DATA_REDIS_PORT=6379
       - SPRING_DATA_REDIS_PASSWORD=admin
       - SPRING_MONGODB_HOST=mongo
       - SPRING_DATA_MONGODB_HOST=mongo
-      - SPRING_DATA_MONGODB_PORT=27017
+      - SPRING_DATA_MONGODB_PORT=27021
       - SPRING_DATA_MONGODB_DATABASE=deployzilla
     depends_on:
       - redis
@@ -19,20 +19,19 @@ services:
     image: redis:alpine
     command: redis-server --requirepass admin
     ports:
-      - "6379:6379"
-
+      - '6379:6379'
 
   redis-insight:
     image: redis/redisinsight:latest
     ports:
-      - "5540:5540"
+      - '5540:5540'
     depends_on:
       - redis
 
   mongo:
     image: mongo:latest
     ports:
-      - "27017:27017"
+      - '27021:27017'
     volumes:
       - mongo-data:/data/db
 
