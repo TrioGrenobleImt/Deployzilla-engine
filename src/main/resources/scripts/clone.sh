@@ -1,32 +1,30 @@
-figlet deployzilla
+#!/bin/bash
 
-echo "Starting stage - cloning repository"
-
-# Initialize variables
-PROJECT_NAME=""
 PROJECT_URL=""
 
-# 1. Parse command line arguments
 while [[ "$#" -gt 0 ]]; do
     case $1 in
-        --project_name) PROJECT_NAME="$2"; shift ;;
         --project_url) PROJECT_URL="$2"; shift ;;
         *) echo "Unknown parameter passed: $1"; exit 1 ;;
     esac
     shift
 done
 
-# 2. Validate that arguments were provided
-if [[ -z "$PROJECT_NAME" ]] || [[ -z "$PROJECT_URL" ]]; then
-    echo "Error: Missing arguments."
-    echo "Usage: $0 --project_name <name> --project_url <url>"
+if [[ -z "$PROJECT_URL" ]]; then
+    echo "Error: Missing argument."
+    echo "Usage: $0 --project_url <url>"
     exit 1
 fi
+
+# 3. Extract project name from URL
+# 'basename' extracts the last part of the path.
+# The second argument ".git" tells it to strip that suffix if present.
+PROJECT_NAME=$(basename "$PROJECT_URL" .git)
 
 # Define the target directory
 TARGET_DIR="$HOME/apps/$PROJECT_NAME"
 
-# 3. Check if directory exists
+# 4. Check if directory exists
 if [ -d "$TARGET_DIR" ]; then
     echo "---------------------------------------------------"
     echo "⚠️  Directory already exists: $TARGET_DIR"
@@ -35,14 +33,14 @@ if [ -d "$TARGET_DIR" ]; then
     exit 0
 fi
 
-# 4. Clone the repository
+# 5. Clone the repository
 echo "---------------------------------------------------"
 echo "Project: $PROJECT_NAME"
 echo "URL:     $PROJECT_URL"
 echo "Target:  $TARGET_DIR"
 echo "---------------------------------------------------"
 
-# Ensure the parent directory exists (~/apps)
+# Ensure the parent directory exists
 mkdir -p "$HOME/apps"
 
 # Execute git clone

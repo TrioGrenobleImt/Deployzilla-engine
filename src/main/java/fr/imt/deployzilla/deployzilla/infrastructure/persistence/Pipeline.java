@@ -14,6 +14,8 @@ public class Pipeline {
     @Id
     private String id;
 
+    private String projectId;
+
     private String status;
 
     private List<Job> jobs = new ArrayList<>();
@@ -23,8 +25,8 @@ public class Pipeline {
         this.status = "PENDING";
     }
 
-    // Standard Getters, Setters, Helpers
     public void addJob(Job job) {
         this.jobs.add(job);
     }
+
 }

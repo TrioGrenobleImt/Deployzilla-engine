@@ -1,7 +1,7 @@
 package fr.imt.deployzilla.deployzilla.business.service;
 
 import fr.imt.deployzilla.deployzilla.configuration.RedisConfiguration;
-import fr.imt.deployzilla.deployzilla.infrastructure.ProcessResult;
+import fr.imt.deployzilla.deployzilla.business.model.ProcessResult;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -11,6 +11,8 @@ import org.springframework.stereotype.Service;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 @Service
@@ -20,7 +22,7 @@ public class BashExecutor {
     private final StringRedisTemplate redisTemplate;
 
     @Async
-    public CompletableFuture<ProcessResult> executeScript(String pipelineId, String scriptName) {
+    public CompletableFuture<ProcessResult> executeScript(String pipelineId, String scriptName, List<String> arguments) {
         try {
             publishLog(pipelineId, "--- Pipeline Started ---");
 
@@ -31,8 +33,14 @@ public class BashExecutor {
             } else {
                 scriptPath = new ClassPathResource("scripts/" + scriptName).getFile().toPath();
             }
-            
-            ProcessBuilder pb = new ProcessBuilder("bash", scriptPath.toString());
+
+            List<String> command = new ArrayList<>();
+
+            command.add("bash");
+            command.add(scriptPath.toString());
+            command.addAll(arguments);
+
+            ProcessBuilder pb = new ProcessBuilder(command);
             pb.redirectErrorStream(true);
 
             Process process = pb.start();
@@ -59,4 +67,5 @@ public class BashExecutor {
         String payload = pipelineId + "|" + message;
         redisTemplate.convertAndSend(RedisConfiguration.LOGS_TOPIC, payload);
     }
+
 }

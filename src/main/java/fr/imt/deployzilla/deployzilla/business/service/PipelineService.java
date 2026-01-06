@@ -1,35 +1,35 @@
-package fr.imt.deployzilla.deployzilla.infrastructure.service;
+package fr.imt.deployzilla.deployzilla.business.service;
 
-import fr.imt.deployzilla.deployzilla.business.service.BashExecutor;
-import fr.imt.deployzilla.deployzilla.infrastructure.ProcessResult;
+import fr.imt.deployzilla.deployzilla.business.command.Command;
+import fr.imt.deployzilla.deployzilla.business.command.CommandFactory;
+import fr.imt.deployzilla.deployzilla.business.model.ProcessResult;
 import fr.imt.deployzilla.deployzilla.infrastructure.persistence.Job;
 import fr.imt.deployzilla.deployzilla.infrastructure.persistence.Pipeline;
 import fr.imt.deployzilla.deployzilla.infrastructure.persistence.repository.PipelineRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.util.Collections;
-import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
+
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
-public class MongoPipelineOrchestrator {
+public class PipelineService {
 
     private final PipelineRepository pipelineRepository;
-    private final BashExecutor bashExecutor;
+    private final CommandFactory commandFactory;
 
     /**
      * Create the pipeline structure
      */
-    public Pipeline createPipeline(List<String> scripts) {
+    public Pipeline createPipeline(String projectId) {
         Pipeline pipeline = new Pipeline();
-        for (String script : scripts) {
-            pipeline.addJob(new Job(script, List.of("")));
-        }
+        // Clone project job
+        pipeline.addJob(new Job("CLONE"));
+        pipeline.setProjectId(projectId);
         return pipelineRepository.save(pipeline);
     }
 
@@ -37,11 +37,11 @@ public class MongoPipelineOrchestrator {
      * Execute the chain
      */
     @Async
-    public void runPipeline(String pipelineId) throws ExecutionException, InterruptedException {
+    public void runPipeline(String pipelineId) {
         Pipeline pipeline = pipelineRepository.findById(pipelineId)
                 .orElseThrow(() -> new RuntimeException("Not Found"));
-
         pipeline.setStatus("RUNNING");
+        log.info("Pipeline {} started", pipeline.getId());
         pipelineRepository.save(pipeline);
 
         boolean chainBroken = false;
@@ -52,18 +52,24 @@ public class MongoPipelineOrchestrator {
                 continue;
             }
 
+            log.info("Job {} running.", job.getId());
+
             job.setStartTime(LocalDateTime.now());
             job.setStatus("RUNNING");
 
             pipelineRepository.save(pipeline);
 
-            CompletableFuture<ProcessResult> result = bashExecutor.executeScript(job.getId(), job.getScriptName());
+            Command command = commandFactory.create(job.getCommandName(), pipeline.getProjectId(), pipelineId);
+
+            ProcessResult result = command.execute();
 
             job.setEndTime(LocalDateTime.now());
 
-            if (result.get().exitCode() == 0) {
+            if (result.getExitCode() == 0) {
+                log.info("Job {} succeeded.", job.getId());
                 job.setStatus("SUCCESS");
             } else {
+                log.info("Job {} failed.", job.getId());
                 job.setStatus("FAILED");
                 chainBroken = true;
                 pipeline.setStatus("FAILED");
@@ -73,8 +79,11 @@ public class MongoPipelineOrchestrator {
         }
 
         if (!chainBroken) {
+            log.info("Pipeline {} succeeded", pipeline.getId());
             pipeline.setStatus("SUCCESS");
             pipelineRepository.save(pipeline);
         }
+
     }
+
 }
