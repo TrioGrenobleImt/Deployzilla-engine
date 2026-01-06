@@ -1,6 +1,8 @@
-package fr.imt.deployzilla.deployzilla.business.service.steps;
+package fr.imt.deployzilla.deployzilla.business.service;
 
-import fr.imt.deployzilla.deployzilla.business.service.ContainerExecutor;
+import fr.imt.deployzilla.deployzilla.business.model.ProcessResult;
+import fr.imt.deployzilla.deployzilla.business.utils.DirectorySanitizer;
+import fr.imt.deployzilla.deployzilla.infrastructure.persistence.Project;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -21,7 +23,7 @@ import java.util.concurrent.CompletableFuture;
 @Component
 @RequiredArgsConstructor
 @Slf4j
-public class GitCloneStep {
+public class GitCloneService {
 
     private static final String GIT_IMAGE = "alpine/git:v2.52.0";
 
@@ -54,39 +56,26 @@ public class GitCloneStep {
      * Clone a repository from GitHub.
      *
      * @param pipelineId Unique pipeline identifier
-     * @param repoUrl    Git repository URL (e.g., "https://github.com/user/repo.git")
-     * @param branch     Branch to clone (default: main)
+     * @param project   Project to clone
      * @param targetDir  Directory name within workspace
      * @return CompletableFuture with exit code (0 = success)
      */
-    public CompletableFuture<Integer> execute(
+    public CompletableFuture<ProcessResult> execute(
             String pipelineId,
-            String repoUrl,
-            String branch,
+            Project project,
             String targetDir) {
 
         String stepId = "git-clone";
 
-        // Validate inputs
-        if (repoUrl == null || repoUrl.isBlank()) {
-            throw new IllegalArgumentException("Repository URL cannot be empty");
-        }
-        if (branch == null || branch.isBlank()) {
-            branch = DEFAULT_BRANCH;
-        }
-        if (targetDir == null || targetDir.isBlank()) {
-            targetDir = extractRepoName(repoUrl);
-        }
-
         // Sanitize target directory to prevent path traversal
-        targetDir = sanitizeDirectoryName(targetDir);
+        targetDir = DirectorySanitizer.sanitizeDirectoryName(targetDir);
 
         // Build git clone command
         List<String> command = List.of(
                 "clone",
                 "--depth", "1",           // Shallow clone for speed
-                "--branch", branch,
-                repoUrl,
+                "--branch", project.getBranch(),
+                project.getName(),
                 CONTAINER_WORKSPACE_PATH + "/" + targetDir
         );
 
@@ -96,7 +85,7 @@ public class GitCloneStep {
                 pipelineWorkspace + ":" + CONTAINER_WORKSPACE_PATH
         );
 
-        log.info("Cloning {} (branch: {}) to {}", repoUrl, branch, pipelineWorkspace + "/" + targetDir);
+        log.info("Cloning {} (branch: {}) to {}", project.getRepoUrl(), project.getBranch(), pipelineWorkspace + "/" + targetDir);
 
         return containerExecutor.executeStep(
                 pipelineId,
@@ -110,10 +99,8 @@ public class GitCloneStep {
 
     /**
      * Clone a private repository using an SSH deploy key content.
-     * 
      * The deploy key content is written to a temporary file in the shared workspace,
      * used for the clone operation, and then securely deleted.
-     * 
      * Deploy keys are more secure than tokens because:
      * - They are repository-specific (least privilege)
      * - They can be read-only
@@ -126,7 +113,7 @@ public class GitCloneStep {
      * @param deployKeyContent The SSH private key content (e.g., from MongoDB)
      * @return CompletableFuture with exit code (0 = success)
      */
-    public CompletableFuture<Integer> executeWithDeployKey(
+    public CompletableFuture<ProcessResult> executeWithDeployKey(
             String pipelineId,
             String sshRepoUrl,
             String branch,
@@ -150,7 +137,7 @@ public class GitCloneStep {
             targetDir = extractRepoName(sshRepoUrl);
         }
 
-        targetDir = sanitizeDirectoryName(targetDir);
+        targetDir = DirectorySanitizer.sanitizeDirectoryName(targetDir);
 
         // Create temp files in secure location (NOT in shared workspace to prevent exfiltration)
         String pipelineWorkspace = workspacePath + "/" + pipelineId;
@@ -204,8 +191,8 @@ public class GitCloneStep {
             // Keys are mounted read-only and in a different path than workspace
             List<String> volumes = List.of(
                     pipelineWorkspace + ":" + CONTAINER_WORKSPACE_PATH,
-                    tempKeyFile.toString() + ":" + CONTAINER_DEPLOY_KEY_FILE + ":ro",
-                    knownHostsFile.toString() + ":" + CONTAINER_KNOWN_HOSTS_FILE + ":ro"
+                    tempKeyFile + ":" + CONTAINER_DEPLOY_KEY_FILE + ":ro",
+                    knownHostsFile+ ":" + CONTAINER_KNOWN_HOSTS_FILE + ":ro"
             );
 
             Map<String, String> envVars = Map.of(
@@ -248,24 +235,23 @@ public class GitCloneStep {
                 } catch (IOException ignored) {}
             }
             log.error("Failed to create temp key files for pipeline {}", pipelineId, e);
-            return CompletableFuture.completedFuture(1);
+            return CompletableFuture.completedFuture(new ProcessResult(1, "ERROR"));
         }
     }
 
     /**
      * Clone a private repository using HTTPS URL format with a deploy key.
-     * 
      * This is a convenience method that automatically converts the HTTPS URL to SSH format
      * and delegates to executeWithDeployKey.
      *
      * @param pipelineId       Unique pipeline identifier
-     * @param httpsRepoUrl     HTTPS repository URL (e.g., "https://github.com/user/repo.git")
+     * @param httpsRepoUrl     HTTPS repository URL (e.g., "<a href="https://github.com/user/repo.git">...</a>")
      * @param branch           Branch to clone (default: main)
      * @param targetDir        Directory name within workspace
      * @param deployKeyContent The SSH private key content (e.g., from MongoDB)
      * @return CompletableFuture with exit code (0 = success)
      */
-    public CompletableFuture<Integer> executePrivateRepo(
+    public CompletableFuture<ProcessResult> executePrivateRepo(
             String pipelineId,
             String httpsRepoUrl,
             String branch,
@@ -278,7 +264,7 @@ public class GitCloneStep {
 
     /**
      * Extract repository name from URL.
-     * Example: "https://github.com/user/my-repo.git" -> "my-repo"
+     * Example: "<a href="https://github.com/user/my-repo.git">...</a>" -> "my-repo"
      */
     private String extractRepoName(String repoUrl) {
         String name = repoUrl.substring(repoUrl.lastIndexOf('/') + 1);
@@ -288,19 +274,10 @@ public class GitCloneStep {
         return name;
     }
 
-    /**
-     * Sanitize directory name to prevent path traversal attacks.
-     */
-    private String sanitizeDirectoryName(String dirName) {
-        return dirName
-                .replaceAll("[^a-zA-Z0-9._-]", "_")
-                .replaceAll("\\.\\.", "_");
-    }
-
 
     /**
      * Convert HTTPS URL to SSH URL format.
-     * Example: "https://github.com/user/repo.git" -> "git@github.com:user/repo.git"
+     * Example: "<a href="https://github.com/user/repo.git">...</a>" -> "git@github.com:user/repo.git"
      */
     public String convertToSshUrl(String httpsUrl) {
         if (httpsUrl == null || !httpsUrl.startsWith("https://")) {
@@ -317,4 +294,3 @@ public class GitCloneStep {
         return "git@" + host + ":" + path;
     }
 }
-

@@ -8,8 +8,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.util.Arrays;
-import java.util.List;
 import java.util.concurrent.ExecutionException;
 
 
@@ -18,17 +16,18 @@ import java.util.concurrent.ExecutionException;
 @Slf4j
 public class JobService {
 
-    private final BashExecutor bashExecutor;
-
     private final ProjectRepository projectRepository;
+
+    private final GitCloneService gitCloneService;
 
     public ProcessResult cloneGitRepository(String projectId, String pipelineId) {
         Project project = projectRepository.findById(projectId)
-                .orElseThrow(() -> new ProjectNotFoundException(""));
+                .orElseThrow(() -> new ProjectNotFoundException(String.format("No project found for id %s", projectId)));
 
         try {
-            return bashExecutor.executeScript(pipelineId, "clone.sh", Arrays.asList("--project_url", project.getRepoUrl()))
-                    .get();
+            return gitCloneService.execute(
+                    pipelineId, project, "/tmp/deployzilla"
+            ).get();
         } catch (InterruptedException | ExecutionException e) {
             log.error("Error {}", e.getMessage());
             return new ProcessResult(1, "ERROR");

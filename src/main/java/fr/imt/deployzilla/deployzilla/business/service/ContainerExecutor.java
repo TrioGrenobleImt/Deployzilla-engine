@@ -8,6 +8,7 @@ import com.github.dockerjava.api.model.*;
 import com.github.dockerjava.core.DefaultDockerClientConfig;
 import com.github.dockerjava.core.DockerClientBuilder;
 import com.github.dockerjava.httpclient5.ApacheDockerHttpClient;
+import fr.imt.deployzilla.deployzilla.business.model.ProcessResult;
 import fr.imt.deployzilla.deployzilla.configuration.RedisConfiguration;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -18,7 +19,6 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
-import java.io.Closeable;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -93,7 +93,7 @@ public class ContainerExecutor {
      * @return CompletableFuture with exit code
      */
     @Async
-    public CompletableFuture<Integer> executeStep(
+    public CompletableFuture<ProcessResult> executeStep(
             String pipelineId,
             String stepId,
             String image,
@@ -165,12 +165,12 @@ public class ContainerExecutor {
 
             publishLog(pipelineId, String.format("--- Step [%s] Finished (Exit: %d) ---", stepId, exitCode));
 
-            return CompletableFuture.completedFuture(exitCode);
+            return CompletableFuture.completedFuture(new ProcessResult(exitCode, "SUCCESS"));
 
         } catch (Exception e) {
             log.error("Container execution failed for step {}", stepId, e);
             publishLog(pipelineId, String.format("ERROR: %s", e.getMessage()));
-            return CompletableFuture.completedFuture(1);
+            return CompletableFuture.completedFuture(new ProcessResult(1, "ERROR"));
 
         } finally {
             // Cleanup container

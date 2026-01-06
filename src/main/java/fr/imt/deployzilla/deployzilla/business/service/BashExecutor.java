@@ -21,8 +21,13 @@ public class BashExecutor {
 
     private final StringRedisTemplate redisTemplate;
 
+
+
     @Async
-    public CompletableFuture<ProcessResult> executeScript(String pipelineId, String scriptName, List<String> arguments) {
+    public CompletableFuture<ProcessResult> executeScript(
+            String pipelineId,
+            String scriptName,
+            List<String> arguments) {
         try {
             publishLog(pipelineId, "--- Pipeline Started ---");
 
