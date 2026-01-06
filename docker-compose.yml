@@ -11,9 +11,52 @@ services:
       - SPRING_DATA_MONGODB_HOST=mongo
       - SPRING_DATA_MONGODB_PORT=27021
       - SPRING_DATA_MONGODB_DATABASE=deployzilla
+      - DOCKER_HOST=tcp://docker-proxy:2375
+      # Use absolute host paths for volumes that spawned containers need to access
+      - DEPLOYZILLA_WORKSPACE_PATH=${PWD}/deployzilla-workspaces
+      - DEPLOYZILLA_KEYS_PATH=${PWD}/deployzilla-keys
+    volumes:
+      # Bind mount host directories (spawned containers can access these)
+      - ./deployzilla-workspaces:/workspaces
+      - ./deployzilla-keys:/secure-keys
     depends_on:
       - redis
       - mongo
+      - docker-proxy
+    networks:
+      - deployzilla
+      - default
+
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      # Allow container operations
+      CONTAINERS: 1
+      IMAGES: 1
+      NETWORKS: 1
+      VOLUMES: 1
+      POST: 1
+      GET: 1
+      # Deny dangerous operations
+      AUTH: 0
+      SECRETS: 0
+      SWARM: 0
+      BUILD: 0
+      COMMIT: 0
+      CONFIGS: 0
+      DISTRIBUTION: 0
+      EXEC: 0
+      GRPC: 0
+      NODES: 0
+      PLUGINS: 0
+      SERVICES: 0
+      SESSION: 0
+      SYSTEM: 0
+      TASKS: 0
+    networks:
+      - deployzilla
 
   redis:
     image: redis:alpine
@@ -35,5 +78,44 @@ services:
     volumes:
       - mongo-data:/data/db
 
+  sonarqube:
+    image: sonarqube:lts-community
+    container_name: sonarqube
+    ports:
+      - "9000:9000"
+    networks:
+      - sonarnet
+    environment:
+      - SONAR_JDBC_URL=jdbc:postgresql://sonar_db:5432/sonar
+      - SONAR_JDBC_USERNAME=sonar
+      - SONAR_JDBC_PASSWORD=sonar
+    volumes:
+      - sonar_data:/opt/sonarqube/data
+      - sonar_extensions:/opt/sonarqube/extensions
+      - sonar_logs:/opt/sonarqube/logs
+    depends_on:
+      - sonar_db
+
+  sonar_db:
+    image: postgres:15
+    container_name: sonar_db
+    networks:
+      - sonarnet
+    environment:
+      - POSTGRES_USER=sonar
+      - POSTGRES_PASSWORD=sonar
+      - POSTGRES_DB=sonar
+    volumes:
+      - sonar_db_data:/var/lib/postgresql/data
+
+networks:
+  sonarnet:
+  deployzilla:
+
 volumes:
   mongo-data:
+  sonar_data:
+  sonar_extensions:
+  sonar_logs:
+  sonar_db_data:
+  pipeline-workspaces:
