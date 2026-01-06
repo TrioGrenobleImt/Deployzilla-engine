@@ -1,6 +1,7 @@
 package fr.imt.deployzilla.deployzilla.infrastructure.persistence;
 
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -8,6 +9,7 @@ import java.util.List;
 import java.util.UUID;
 
 @Data
+@NoArgsConstructor
 public class Job {
 
     private String id;

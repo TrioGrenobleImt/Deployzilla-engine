@@ -28,7 +28,7 @@ public class MongoPipelineOrchestrator {
     public Pipeline createPipeline(List<String> scripts) {
         Pipeline pipeline = new Pipeline();
         for (String script : scripts) {
-            pipeline.addJob(new Job(script, Collections.emptyList()));
+            pipeline.addJob(new Job(script, List.of("")));
         }
         return pipelineRepository.save(pipeline);
     }

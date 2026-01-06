@@ -21,6 +21,7 @@ public class PipelineController {
     public ResponseEntity<String> startPipeline() throws ExecutionException, InterruptedException {
         String pipelineId = mongoPipelineOrchestrator.createPipeline(List.of("sayhi.sh", "test.sh"))
                 .getId();
+
         mongoPipelineOrchestrator.runPipeline(pipelineId);
         return ResponseEntity.ok("Pipeline started.");
     }
