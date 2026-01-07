@@ -37,6 +37,7 @@ public class Pipeline {
     public Pipeline() {
         this.id = UUID.randomUUID().toString();
         this.status = "CREATED";
+        this.createdAt = LocalDateTime.now();
     }
 
     public void addJob(Job job) {
