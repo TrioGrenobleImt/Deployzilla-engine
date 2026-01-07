@@ -106,6 +106,14 @@ services:
     volumes:
       - sonar_db_data:/var/lib/postgresql/data
 
+  git-clone:
+    image: deployzilla/git-clone:latest
+    build:
+      context: ./src/main/resources/docker/git-clone
+    entrypoint: ["true"]
+    networks:
+      - deployzilla
+
 networks:
   sonarnet:
   deployzilla:

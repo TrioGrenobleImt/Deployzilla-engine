@@ -25,7 +25,8 @@ import java.util.concurrent.CompletableFuture;
 @Slf4j
 public class GitCloneService {
 
-    private static final String GIT_IMAGE = "alpine/git:v2.52.0";
+    // Custom image name - implies it must be built tagged as such
+    private static final String GIT_IMAGE = "deployzilla/git-clone:latest";
 
     // Container mount paths
     private static final String CONTAINER_WORKSPACE_PATH = "/workspace";
@@ -57,7 +58,7 @@ public class GitCloneService {
      *
      * @param pipelineId Unique pipeline identifier
      * @param project   Project to clone
-     * @param targetDir  Directory name within workspace
+     * @param targetDir  Directory name within workspace (relative to workspace root)
      * @return CompletableFuture with exit code (0 = success)
      */
     public CompletableFuture<ProcessResult> execute(
@@ -70,13 +71,11 @@ public class GitCloneService {
         // Sanitize target directory to prevent path traversal
         targetDir = DirectorySanitizer.sanitizeDirectoryName(targetDir);
 
-        // Build git clone command
-        List<String> command = List.of(
-                "clone",
-                "--depth", "1",           // Shallow clone for speed
-                "--branch", project.getBranch(),
-                project.getName(),
-                CONTAINER_WORKSPACE_PATH + "/" + targetDir
+        // Environment variables for the container script
+        Map<String, String> envVars = Map.of(
+                "GIT_REPO", project.getRepoUrl(),
+                "GIT_BRANCH", project.getBranch(),
+                "TARGET_DIR", targetDir
         );
 
         // Mount shared workspace volume
@@ -85,15 +84,14 @@ public class GitCloneService {
                 pipelineWorkspace + ":" + CONTAINER_WORKSPACE_PATH
         );
 
-        log.info("Cloning {} (branch: {}) to {}", project.getRepoUrl(), project.getBranch(), pipelineWorkspace + "/" + targetDir);
+        log.info("Cloning {} (branch: {}) to {} using Docker env vars", project.getRepoUrl(), project.getBranch(), pipelineWorkspace + "/" + targetDir);
 
         return containerExecutor.executeStep(
                 pipelineId,
                 stepId,
                 GIT_IMAGE,
-                command,
                 volumes,
-                Map.of()  // No extra env vars needed for public repos
+                envVars
         );
     }
 
@@ -166,6 +164,7 @@ public class GitCloneService {
                     PosixFilePermission.OWNER_READ,
                     PosixFilePermission.OWNER_WRITE
             );
+
             try {
                 Files.setPosixFilePermissions(tempKeyFile, permissions);
                 Files.setPosixFilePermissions(knownHostsFile, permissions);
@@ -179,14 +178,6 @@ public class GitCloneService {
                     " -o UserKnownHostsFile=" + CONTAINER_KNOWN_HOSTS_FILE +
                     " -o StrictHostKeyChecking=yes";
 
-            List<String> command = List.of(
-                    "clone",
-                    "--depth", "1",
-                    "--branch", branch,
-                    sshRepoUrl,
-                    CONTAINER_WORKSPACE_PATH + "/" + targetDir
-            );
-
             // Mount workspace AND secure keys directory separately
             // Keys are mounted read-only and in a different path than workspace
             List<String> volumes = List.of(
@@ -196,7 +187,10 @@ public class GitCloneService {
             );
 
             Map<String, String> envVars = Map.of(
-                    "GIT_SSH_COMMAND", gitSshCommand
+                    "GIT_SSH_COMMAND", gitSshCommand,
+                    "GIT_REPO", sshRepoUrl,
+                    "GIT_BRANCH", branch,
+                    "TARGET_DIR", targetDir
             );
 
             log.info("Cloning via SSH {} (branch: {}) to {}", sshRepoUrl, branch, pipelineWorkspace + "/" + targetDir);
@@ -208,7 +202,6 @@ public class GitCloneService {
                     pipelineId,
                     stepId,
                     GIT_IMAGE,
-                    command,
                     volumes,
                     envVars
             ).whenComplete((exitCode, throwable) -> {

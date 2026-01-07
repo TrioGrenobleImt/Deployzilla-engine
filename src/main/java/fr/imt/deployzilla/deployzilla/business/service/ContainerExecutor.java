@@ -97,7 +97,6 @@ public class ContainerExecutor {
             String pipelineId,
             String stepId,
             String image,
-            List<String> command,
             List<String> volumes,
             Map<String, String> envVars) {
 
@@ -106,7 +105,6 @@ public class ContainerExecutor {
         try {
             publishLog(pipelineId, String.format("--- Step [%s] Starting ---", stepId));
             publishLog(pipelineId, String.format("Image: %s", image));
-            publishLog(pipelineId, String.format("Command: %s", String.join(" ", command)));
 
             // Pull image if not present
             pullImageIfNeeded(pipelineId, image);
@@ -144,7 +142,6 @@ public class ContainerExecutor {
             // Create container
             CreateContainerResponse container = dockerClient.createContainerCmd(image)
                     .withLabels(labels)
-                    .withCmd(command)
                     .withEnv(env)
                     .withHostConfig(hostConfig)
                     .exec();
