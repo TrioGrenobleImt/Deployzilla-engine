@@ -6,6 +6,8 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+import fr.imt.deployzilla.deployzilla.business.model.JobType;
+
 @Data
 @NoArgsConstructor
 public class Job {
@@ -15,12 +17,12 @@ public class Job {
     private LocalDateTime startTime;
     private LocalDateTime endTime;
 
-    private String commandName;
+    private JobType jobType;
 
-    public Job(String commandName) {
+    public Job(JobType jobType) {
         this.id = UUID.randomUUID().toString();
         this.status = "PENDING";
-        this.commandName = commandName;
+        this.jobType = jobType;
     }
 
 }

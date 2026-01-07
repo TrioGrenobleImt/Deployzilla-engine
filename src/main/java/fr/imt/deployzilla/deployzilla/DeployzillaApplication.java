@@ -6,10 +6,13 @@ import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 import org.springframework.data.mongodb.config.EnableMongoAuditing;
 import org.springframework.data.mongodb.repository.config.EnableMongoRepositories;
 
+import org.springframework.scheduling.annotation.EnableAsync;
+
 @SpringBootApplication
 @ConfigurationPropertiesScan
 @EnableMongoRepositories
 @EnableMongoAuditing
+@EnableAsync
 public class DeployzillaApplication {
 
     public static void main(String[] args) {

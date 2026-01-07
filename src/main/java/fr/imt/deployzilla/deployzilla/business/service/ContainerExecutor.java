@@ -43,10 +43,10 @@ public class ContainerExecutor {
     @Value("${docker.host:unix:///var/run/docker.sock}")
     private String dockerHost;
 
-    @Value("${docker.timeout.seconds:300}")
+    @Value("${docker.timeout.seconds:600}")
     private int timeoutSeconds;
 
-    @Value("${docker.memory.limit:536870912}") // 512MB default
+    @Value("${docker.memory.limit:5368709120}") // 5GB default
     private long memoryLimit;
 
     private DockerClient dockerClient;
@@ -60,7 +60,7 @@ public class ContainerExecutor {
         ApacheDockerHttpClient httpClient = new ApacheDockerHttpClient.Builder()
                 .dockerHost(config.getDockerHost())
                 .connectionTimeout(Duration.ofSeconds(30))
-                .responseTimeout(Duration.ofSeconds(45))
+                .responseTimeout(Duration.ofSeconds(timeoutSeconds))
                 .build();
 
         this.dockerClient = DockerClientBuilder.getInstance(config)
