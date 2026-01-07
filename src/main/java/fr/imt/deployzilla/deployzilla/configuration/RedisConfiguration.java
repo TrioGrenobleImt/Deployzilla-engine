@@ -1,6 +1,7 @@
 package fr.imt.deployzilla.deployzilla.configuration;
 
 import fr.imt.deployzilla.deployzilla.business.service.RedisLogSubscriber;
+import fr.imt.deployzilla.deployzilla.business.service.RedisPipelineStatusSubscriber;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
@@ -13,19 +14,27 @@ import org.springframework.data.redis.listener.adapter.MessageListenerAdapter;
 public class RedisConfiguration {
 
     public static final String LOGS_TOPIC = "pipeline-logs";
+    public static final String PIPELINE_STATUS_TOPIC = "pipeline-status";
 
     @Bean
     RedisMessageListenerContainer container(RedisConnectionFactory connectionFactory,
-                                            MessageListenerAdapter listenerAdapter) {
+                                            MessageListenerAdapter logListenerAdapter,
+                                            MessageListenerAdapter statusListenerAdapter) {
         RedisMessageListenerContainer container = new RedisMessageListenerContainer();
         container.setConnectionFactory(connectionFactory);
-        // Subscribe to the global logs topic
-        container.addMessageListener(listenerAdapter, new ChannelTopic(LOGS_TOPIC));
+        // Subscribe to topics
+        container.addMessageListener(logListenerAdapter, new ChannelTopic(LOGS_TOPIC));
+        container.addMessageListener(statusListenerAdapter, new ChannelTopic(PIPELINE_STATUS_TOPIC));
         return container;
     }
 
     @Bean
-    MessageListenerAdapter listenerAdapter(RedisLogSubscriber subscriber) {
+    MessageListenerAdapter logListenerAdapter(RedisLogSubscriber subscriber) {
+        return new MessageListenerAdapter(subscriber, "onMessage");
+    }
+
+    @Bean
+    MessageListenerAdapter statusListenerAdapter(RedisPipelineStatusSubscriber subscriber) {
         return new MessageListenerAdapter(subscriber, "onMessage");
     }
 

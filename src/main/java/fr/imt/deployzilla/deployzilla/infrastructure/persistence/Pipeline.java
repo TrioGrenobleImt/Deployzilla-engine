@@ -36,7 +36,7 @@ public class Pipeline {
 
     public Pipeline() {
         this.id = UUID.randomUUID().toString();
-        this.status = "PENDING";
+        this.status = "CREATED";
     }
 
     public void addJob(Job job) {
