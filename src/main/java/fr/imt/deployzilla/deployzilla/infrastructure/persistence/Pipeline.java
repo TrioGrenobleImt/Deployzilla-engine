@@ -1,8 +1,12 @@
 package fr.imt.deployzilla.deployzilla.infrastructure.persistence;
 
 import lombok.Data;
+import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.mongodb.core.mapping.Document;
+
+import java.time.LocalDateTime;
 import java.util.UUID;
 import java.util.List;
 import java.util.ArrayList;
@@ -18,7 +22,17 @@ public class Pipeline {
 
     private String status;
 
+    private String commitHash;
+
+    private String author;
+
     private List<Job> jobs = new ArrayList<>();
+
+    @CreatedDate
+    private LocalDateTime createdAt;
+
+    @LastModifiedDate
+    private LocalDateTime updatedAt;
 
     public Pipeline() {
         this.id = UUID.randomUUID().toString();

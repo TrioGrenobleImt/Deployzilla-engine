@@ -25,11 +25,13 @@ public class PipelineService {
     /**
      * Create the pipeline structure
      */
-    public Pipeline createPipeline(String projectId) {
+    public Pipeline createPipeline(String projectId, String commitHash, String author) {
         Pipeline pipeline = new Pipeline();
         // Clone project job
         pipeline.addJob(new Job("CLONE"));
         pipeline.setProjectId(projectId);
+        pipeline.setCommitHash(commitHash);
+        pipeline.setAuthor(author);
         return pipelineRepository.save(pipeline);
     }
 

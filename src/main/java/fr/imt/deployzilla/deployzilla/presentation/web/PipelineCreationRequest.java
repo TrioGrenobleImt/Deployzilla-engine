@@ -7,4 +7,8 @@ public class PipelineCreationRequest {
 
     String projectId;
 
+    String commitHash;
+
+    String author;
+
 }

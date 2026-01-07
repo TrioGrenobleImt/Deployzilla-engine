@@ -17,7 +17,7 @@ public class PipelineController {
 
     @PostMapping("/start")
     public ResponseEntity<String> startPipeline(@RequestBody PipelineCreationRequest request) {
-        String pipelineId = pipelineService.createPipeline(request.getProjectId())
+        String pipelineId = pipelineService.createPipeline(request.getProjectId(), request.getCommitHash(), request.getAuthor())
                 .getId();
 
         pipelineService.runPipeline(pipelineId);
