@@ -274,7 +274,6 @@ public class GitCloneService {
         return name;
     }
 
-
     /**
      * Convert HTTPS URL to SSH URL format.
      * Example: "<a href="https://github.com/user/repo.git">...</a>" -> "git@github.com:user/repo.git"

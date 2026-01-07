@@ -12,6 +12,7 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.Iterator;
 
 
 @Service
@@ -42,17 +43,16 @@ public class PipelineService {
     public void runPipeline(String pipelineId) {
         Pipeline pipeline = pipelineRepository.findById(pipelineId)
                 .orElseThrow(() -> new RuntimeException("Not Found"));
+
         pipeline.setStatus("RUNNING");
         log.info("Pipeline {} started", pipeline.getId());
         pipelineRepository.save(pipeline);
 
         boolean chainBroken = false;
 
-        for (Job job : pipeline.getJobs()) {
-            if (chainBroken) {
-                job.setStatus("SKIPPED");
-                continue;
-            }
+        Iterator<Job> iterator = pipeline.getJobs().iterator();
+        while (iterator.hasNext() && !chainBroken) {
+            Job job = iterator.next();
 
             log.info("Job {} running.", job.getId());
 
@@ -74,7 +74,6 @@ public class PipelineService {
                 log.info("Job {} failed.", job.getId());
                 job.setStatus("FAILED");
                 chainBroken = true;
-                pipeline.setStatus("FAILED");
             }
 
             pipelineRepository.save(pipeline);
@@ -85,7 +84,8 @@ public class PipelineService {
             pipeline.setStatus("SUCCESS");
             pipelineRepository.save(pipeline);
         }
-
+        log.warn("Pipeline {} failed", pipeline.getId());
+        pipeline.setStatus("FAILED");
     }
 
 }

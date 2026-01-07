@@ -1,4 +1,4 @@
-package fr.imt.deployzilla.deployzilla.business.exception;
+package fr.imt.deployzilla.deployzilla.exception;
 
 public class ProjectNotFoundException extends RuntimeException{
 

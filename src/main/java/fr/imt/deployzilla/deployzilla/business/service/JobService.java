@@ -1,6 +1,6 @@
 package fr.imt.deployzilla.deployzilla.business.service;
 
-import fr.imt.deployzilla.deployzilla.business.exception.ProjectNotFoundException;
+import fr.imt.deployzilla.deployzilla.exception.ProjectNotFoundException;
 import fr.imt.deployzilla.deployzilla.business.model.ProcessResult;
 import fr.imt.deployzilla.deployzilla.infrastructure.persistence.Project;
 import fr.imt.deployzilla.deployzilla.infrastructure.persistence.repository.ProjectRepository;
