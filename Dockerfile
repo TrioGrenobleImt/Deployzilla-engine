@@ -13,4 +13,4 @@ COPY --from=build /app/target/*.jar app.jar
 COPY --from=build /app/src/main/resources/scripts /app/scripts
 RUN chmod +x /app/scripts/*.sh
 EXPOSE 8081
-ENTRYPOINT ["java", "-jar", "app.jar"]
+ENTRYPOINT ["java", "-Dspring.data.mongodb.uri=mongodb://mongo:27017/deployzilla", "-jar", "app.jar"]

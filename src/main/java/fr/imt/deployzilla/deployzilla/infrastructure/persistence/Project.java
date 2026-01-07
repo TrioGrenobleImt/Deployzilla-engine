@@ -1,6 +1,7 @@
 package fr.imt.deployzilla.deployzilla.infrastructure.persistence;
 
 import lombok.Value;
+import org.bson.types.ObjectId;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -9,7 +10,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
 public class Project {
 
     @Id
-    String projectId;
+    ObjectId projectId;
 
     String name;
 

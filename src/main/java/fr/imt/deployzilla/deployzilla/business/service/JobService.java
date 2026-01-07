@@ -6,6 +6,7 @@ import fr.imt.deployzilla.deployzilla.infrastructure.persistence.Project;
 import fr.imt.deployzilla.deployzilla.infrastructure.persistence.repository.ProjectRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.bson.types.ObjectId;
 import org.springframework.stereotype.Service;
 
 import java.util.concurrent.ExecutionException;
@@ -21,8 +22,8 @@ public class JobService {
     private final GitCloneService gitCloneService;
 
     public ProcessResult cloneGitRepository(String projectId, String pipelineId) {
-        Project project = projectRepository.findById(projectId)
-                .orElseThrow(() -> new ProjectNotFoundException(String.format("No project found for id %s", projectId)));
+        Project project = projectRepository.findById(new ObjectId(projectId))
+                .orElseThrow(() -> new ProjectNotFoundException(projectId));
 
         try {
             return gitCloneService.execute(

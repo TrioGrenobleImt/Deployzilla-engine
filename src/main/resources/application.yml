@@ -8,8 +8,7 @@ spring:
       password: ${SPRING_DATA_REDIS_PASSWORD:admin}
       timeout: 60000
     mongodb:
-      host: ${SPRING_DATA_MONGODB_HOST:localhost}
-      port: ${SPRING_DATA_MONGODB_PORT:27021}
+      uri: ${SPRING_DATA_MONGODB_URI:mongodb://localhost:27017/deployzilla}
       database: ${SPRING_DATA_MONGODB_DATABASE:deployzilla}
 server:
   port: 8081

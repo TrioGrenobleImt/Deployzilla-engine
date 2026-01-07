@@ -7,10 +7,8 @@ services:
       - SPRING_DATA_REDIS_HOST=redis
       - SPRING_DATA_REDIS_PORT=6379
       - SPRING_DATA_REDIS_PASSWORD=admin
-      - SPRING_MONGODB_HOST=mongo
-      - SPRING_DATA_MONGODB_HOST=mongo
-      - SPRING_DATA_MONGODB_PORT=27021
-      - SPRING_DATA_MONGODB_DATABASE=deployzilla
+      - SPRING_DATA_MONGODB_URI=mongodb://mongo:27017/deployzilla
+      - SPRING_MONGODB_URI=mongodb://mongo:27017/deployzilla
       - DOCKER_HOST=tcp://docker-proxy:2375
       # Use absolute host paths for volumes that spawned containers need to access
       - DEPLOYZILLA_WORKSPACE_PATH=${PWD}/deployzilla-workspaces
@@ -74,7 +72,7 @@ services:
   mongo:
     image: mongo:latest
     ports:
-      - '27021:27017'
+      - '27017:27017'
     volumes:
       - mongo-data:/data/db
 
@@ -82,7 +80,7 @@ services:
     image: sonarqube:lts-community
     container_name: sonarqube
     ports:
-      - "9000:9000"
+      - '9000:9000'
     networks:
       - sonarnet
     environment:
