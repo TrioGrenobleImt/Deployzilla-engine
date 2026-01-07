@@ -7,6 +7,7 @@ import fr.imt.deployzilla.deployzilla.infrastructure.persistence.Job;
 import fr.imt.deployzilla.deployzilla.infrastructure.persistence.Pipeline;
 import fr.imt.deployzilla.deployzilla.infrastructure.persistence.repository.PipelineRepository;
 import fr.imt.deployzilla.deployzilla.configuration.RedisConfiguration;
+import fr.imt.deployzilla.deployzilla.business.model.JobType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -46,7 +47,10 @@ public class PipelineService {
     public Pipeline createPipeline(String projectId, String commitHash, String author) {
         Pipeline pipeline = new Pipeline();
         // Clone project job
-        pipeline.addJob(new Job("CLONE"));
+        pipeline.addJob(new Job(JobType.CLONE));
+        pipeline.addJob(new Job(JobType.NPM_INSTALL));
+        pipeline.addJob(new Job(JobType.NPM_LINT));
+        pipeline.addJob(new Job(JobType.NPM_TEST));
         pipeline.setProjectId(projectId);
         pipeline.setCommitHash(commitHash);
         pipeline.setAuthor(author);
@@ -80,9 +84,9 @@ public class PipelineService {
             job.setStatus("RUNNING");
 
             pipelineRepository.save(pipeline);
-            publishStatus(pipelineId, "RUNNING", job.getCommandName());
+            publishStatus(pipelineId, "RUNNING", job.getJobType().getCommandName());
 
-            Command command = commandFactory.create(job.getCommandName(), pipeline.getProjectId(), pipelineId);
+            Command command = commandFactory.create(job.getJobType().getCommandName(), pipeline.getProjectId(), pipelineId);
 
             ProcessResult result = command.execute();
 
@@ -92,7 +96,7 @@ public class PipelineService {
                 log.info("Job {} succeeded.", job.getId());
                 job.setStatus("SUCCESS");
             } else {
-                log.info("Job {} failed.", job.getId());
+                log.warn("Job {} failed. Exit code: {}", job.getId(), result.getExitCode());
                 job.setStatus("FAILED");
                 chainBroken = true;
             }
@@ -108,9 +112,9 @@ public class PipelineService {
         } else {
             log.warn("Pipeline {} failed", pipeline.getId());
             pipeline.setStatus("FAILED");
-            pipelineRepository.save(pipeline);
             publishStatus(pipelineId, "FAILED", null);
         }
+        pipelineRepository.save(pipeline);
     }
 
 }

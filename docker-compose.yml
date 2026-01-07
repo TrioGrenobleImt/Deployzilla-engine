@@ -106,10 +106,39 @@ services:
     volumes:
       - sonar_db_data:/var/lib/postgresql/data
 
-  git-clone:
-    image: deployzilla/git-clone:latest
+  # Builder services to create the images used by the application
+  step-git-clone:
+    image: deployzilla/step:git-clone
     build:
-      context: ./src/main/resources/docker/git-clone
+      context: ./src/main/resources/docker
+      target: git-clone
+    entrypoint: ["true"]
+    networks:
+      - deployzilla
+
+  step-npm-lint:
+    image: deployzilla/step:npm-lint
+    build:
+      context: ./src/main/resources/docker
+      target: npm-lint
+    entrypoint: ["true"]
+    networks:
+      - deployzilla
+
+  step-npm-test:
+    image: deployzilla/step:npm-test
+    build:
+      context: ./src/main/resources/docker
+      target: npm-test
+    entrypoint: ["true"]
+    networks:
+      - deployzilla
+
+  step-npm-install:
+    image: deployzilla/step:npm-install
+    build:
+      context: ./src/main/resources/docker
+      target: npm-install
     entrypoint: ["true"]
     networks:
       - deployzilla

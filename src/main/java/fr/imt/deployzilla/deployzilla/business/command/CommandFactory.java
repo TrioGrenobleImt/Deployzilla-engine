@@ -1,6 +1,7 @@
 package fr.imt.deployzilla.deployzilla.business.command;
 
 import fr.imt.deployzilla.deployzilla.business.service.JobService;
+import fr.imt.deployzilla.deployzilla.business.model.JobType;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
@@ -14,8 +15,17 @@ public class CommandFactory {
 
     public CommandFactory(JobService jobService) {
 
-        registry.put("CLONE", (projId, pipeId) ->
-                new FetchProjectCommand(jobService, projId, pipeId));
+        registry.put(JobType.CLONE.getCommandName(), (projectId, pipelineId) ->
+                new FetchProjectCommand(jobService, projectId, pipelineId));
+
+        registry.put(JobType.NPM_INSTALL.getCommandName(), (projectId, pipelineId) ->
+                new RunNpmInstallCommand(jobService, projectId, pipelineId));
+
+        registry.put(JobType.NPM_LINT.getCommandName(), (projectId, pipelineId) ->
+                new RunEslintCommand(jobService, projectId, pipelineId));
+
+        registry.put(JobType.NPM_TEST.getCommandName(), (projectId, pipelineId) ->
+                new RunUnitTestsCommand(jobService, projectId, pipelineId));
     }
 
     public Command create(String commandName, String projectId, String pipelineId) {
