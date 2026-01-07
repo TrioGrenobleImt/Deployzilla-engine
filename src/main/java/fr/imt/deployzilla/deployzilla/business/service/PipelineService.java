@@ -84,7 +84,7 @@ public class PipelineService {
             job.setStatus("RUNNING");
 
             pipelineRepository.save(pipeline);
-            publishStatus(pipelineId, "RUNNING", job.getCommandName());
+            publishStatus(pipelineId, "RUNNING", job.getJobType().getCommandName());
 
             Command command = commandFactory.create(job.getJobType().getCommandName(), pipeline.getProjectId(), pipelineId);
 
@@ -95,11 +95,11 @@ public class PipelineService {
             if (result.getExitCode() == 0) {
                 log.info("Job {} succeeded.", job.getId());
                 job.setStatus("SUCCESS");
-        } else {
-            log.warn("Job {} failed. Exit code: {}", job.getId(), result.getExitCode());
-            job.setStatus("FAILED");
-            chainBroken = true;
-        }
+            } else {
+                log.warn("Job {} failed. Exit code: {}", job.getId(), result.getExitCode());
+                job.setStatus("FAILED");
+                chainBroken = true;
+            }
 
             pipelineRepository.save(pipeline);
         }

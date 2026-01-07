@@ -46,7 +46,7 @@ public class ContainerExecutor {
     @Value("${docker.timeout.seconds:600}")
     private int timeoutSeconds;
 
-    @Value("${docker.memory.limit:5368709120}") // 5GB default
+    @Value("${docker.memory.limit:2147483648}") // 2GB default
     private long memoryLimit;
 
     private DockerClient dockerClient;
