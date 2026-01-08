@@ -285,4 +285,44 @@ public class GitCloneService {
         String path = withoutProtocol.substring(firstSlash + 1);
         return "git@" + host + ":" + path;
     }
+
+    /**
+     * Retrieve the current commit hash (HEAD) from the cloned repository.
+     * Use a lightweight git image to run "git rev-parse HEAD".
+     */
+    public CompletableFuture<String> retrieveCommitHash(String pipelineId, String targetDir) {
+        String stepId = "git-rev-parse";
+        targetDir = DirectorySanitizer.sanitizeDirectoryName(targetDir);
+
+        String pipelineWorkspace = workspacePath + "/" + pipelineId;
+        // In container, the workspace is mounted at /workspace
+        String containerRepoPath = CONTAINER_WORKSPACE_PATH + "/" + targetDir;
+
+        // Use standard alpine/git image
+        String minimalGitImage = "alpine/git:latest"; 
+
+        List<String> volumes = List.of(
+                pipelineWorkspace + ":" + CONTAINER_WORKSPACE_PATH
+        );
+
+        // Command: git -C /workspace/targetDir rev-parse HEAD
+        // Assuming entrypoint is "git"
+        List<String> command = List.of("-C", containerRepoPath, "rev-parse", "HEAD");
+
+        return containerExecutor.executeStep(
+                pipelineId,
+                stepId,
+                minimalGitImage,
+                volumes,
+                null, // No env vars needed
+                command
+        ).thenApply(result -> {
+            if (result.getExitCode() == 0 && result.getOutput() != null) {
+                return result.getOutput().trim();
+            } else {
+                log.warn("Failed to retrieve commit hash. Exit: {}, Output: {}", result.getExitCode(), result.getOutput());
+                return ""; // Fallback to empty or null?
+            }
+        });
+    }
 }

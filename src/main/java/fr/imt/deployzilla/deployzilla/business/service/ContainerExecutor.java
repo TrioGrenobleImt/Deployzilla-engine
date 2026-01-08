@@ -99,6 +99,17 @@ public class ContainerExecutor {
             String image,
             List<String> volumes,
             Map<String, String> envVars) {
+        return executeStep(pipelineId, stepId, image, volumes, envVars, null);
+    }
+
+    @Async
+    public CompletableFuture<ProcessResult> executeStep(
+            String pipelineId,
+            String stepId,
+            String image,
+            List<String> volumes,
+            Map<String, String> envVars,
+            List<String> command) {
 
         String containerId = null;
 
@@ -140,11 +151,16 @@ public class ContainerExecutor {
                     .withAutoRemove(false);      // We'll remove manually after logs
 
             // Create container
-            CreateContainerResponse container = dockerClient.createContainerCmd(image)
+            var containerCmd = dockerClient.createContainerCmd(image)
                     .withLabels(labels)
                     .withEnv(env)
-                    .withHostConfig(hostConfig)
-                    .exec();
+                    .withHostConfig(hostConfig);
+
+            if (command != null && !command.isEmpty()) {
+                containerCmd.withCmd(command);
+            }
+
+            CreateContainerResponse container = containerCmd.exec();
 
             containerId = container.getId();
             publishLog(pipelineId, String.format("Container created: %s", containerId.substring(0, 12)));
@@ -152,8 +168,9 @@ public class ContainerExecutor {
             // Start container
             dockerClient.startContainerCmd(containerId).exec();
 
-            // Stream logs to Redis
-            streamLogs(pipelineId, containerId);
+            // Stream logs to Redis and capture output
+            StringBuilder capturedOutput = new StringBuilder();
+            streamLogs(pipelineId, containerId, capturedOutput);
 
             // Wait for completion with timeout
             Integer exitCode = dockerClient.waitContainerCmd(containerId)
@@ -162,7 +179,7 @@ public class ContainerExecutor {
 
             publishLog(pipelineId, String.format("--- Step [%s] Finished (Exit: %d) ---", stepId, exitCode));
 
-            return CompletableFuture.completedFuture(new ProcessResult(exitCode, "SUCCESS"));
+            return CompletableFuture.completedFuture(new ProcessResult(exitCode, capturedOutput.toString()));
 
         } catch (Exception e) {
             log.error("Container execution failed for step {}", stepId, e);
@@ -188,51 +205,51 @@ public class ContainerExecutor {
      * Pull image if not already present locally.
      * Always pulls if the image uses a specific tag to ensure we have the correct version.
      */
+    /**
+     * Pull image if not already present locally.
+     * Always pulls if the image uses a specific tag to ensure we have the correct version.
+     */
     private void pullImageIfNeeded(String pipelineId, String image) {
+        // Normalize image name to always have a tag for comparison
+        String imageToCheck = image.contains(":") ? image : image + ":latest";
+
         try {
-            // Check if image exists locally
+            // Check if exact image exists locally
+            // We strip the tag for the filter, then check exact tag match in results
+            String repoName = imageToCheck.split(":")[0];
             List<Image> images = dockerClient.listImagesCmd()
-                    .withImageNameFilter(image)
+                    .withImageNameFilter(repoName)
                     .exec();
 
-            boolean needsPull = images.isEmpty();
-            
-            // For tagged images (not :latest), check if tag matches
-            if (!needsPull && !image.endsWith(":latest") && image.contains(":")) {
-                String tag = image.substring(image.lastIndexOf(':') + 1);
-                needsPull = images.stream()
-                        .noneMatch(img -> img.getRepoTags() != null && 
-                                java.util.Arrays.stream(img.getRepoTags())
-                                        .anyMatch(t -> t.contains(tag)));
-            }
+            boolean exists = images.stream()
+                    .anyMatch(img -> img.getRepoTags() != null && 
+                            java.util.Arrays.asList(img.getRepoTags()).contains(imageToCheck));
 
-            if (needsPull) {
-                publishLog(pipelineId, String.format("Pulling image: %s", image));
-                log.info("Pulling Docker image: {}", image);
+            if (!exists) {
+                publishLog(pipelineId, String.format("Pulling image: %s", imageToCheck));
+                log.info("Pulling Docker image: {}", imageToCheck);
                 
-                dockerClient.pullImageCmd(image)
+                dockerClient.pullImageCmd(imageToCheck)
                         .start()
                         .awaitCompletion(5, TimeUnit.MINUTES);
                 
                 publishLog(pipelineId, "Image pulled successfully");
-                log.info("Successfully pulled image: {}", image);
-            } else {
-                log.debug("Image already exists locally: {}", image);
+                log.info("Successfully pulled image: {}", imageToCheck);
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new RuntimeException("Image pull interrupted", e);
         } catch (Exception e) {
-            log.error("Failed to pull image: {}", image, e);
-            publishLog(pipelineId, String.format("Warning: Failed to pull image %s: %s", image, e.getMessage()));
-            // Don't throw - try to continue with possibly cached image
+            log.error("Failed to pull image: {}", imageToCheck, e);
+            publishLog(pipelineId, String.format("ERROR: Failed to pull image %s: %s", imageToCheck, e.getMessage()));
+            throw new RuntimeException("Failed to pull image: " + imageToCheck, e);
         }
     }
 
     /**
      * Stream container logs to Redis.
      */
-    private void streamLogs(String pipelineId, String containerId) {
+    private void streamLogs(String pipelineId, String containerId, StringBuilder outputBuffer) {
         try {
             dockerClient.logContainerCmd(containerId)
                     .withStdOut(true)
@@ -244,6 +261,9 @@ public class ContainerExecutor {
                             String logLine = new String(frame.getPayload()).trim();
                             if (!logLine.isEmpty()) {
                                 publishLog(pipelineId, logLine);
+                                if (StreamType.STDOUT.equals(frame.getStreamType())) {
+                                    outputBuffer.append(logLine).append("\n");
+                                }
                             }
                         }
                     })

@@ -26,6 +26,10 @@ public class Pipeline {
 
     private String author;
 
+    private String trigger;
+
+    private String triggerAuthor;
+
     private List<Job> jobs = new ArrayList<>();
 
     @CreatedDate

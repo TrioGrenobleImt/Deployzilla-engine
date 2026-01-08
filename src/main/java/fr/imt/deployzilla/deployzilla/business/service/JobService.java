@@ -31,9 +31,20 @@ public class JobService {
                 .orElseThrow(() -> new ProjectNotFoundException(projectId));
 
         try {
-            return gitCloneService.execute(
+            ProcessResult cloneResult = gitCloneService.execute(
                     pipelineId, project, PROJECT_DIR
             ).get();
+
+            if (cloneResult.getExitCode() == 0) {
+                // If clone successful, try to retrieve commit hash
+                String hash = gitCloneService.retrieveCommitHash(pipelineId, PROJECT_DIR).get();
+                if (hash != null && !hash.isEmpty()) {
+                    // Return the hash as output
+                    return new ProcessResult(0, hash);
+                }
+            }
+            return cloneResult;
+
         } catch (InterruptedException | ExecutionException e) {
             log.error("Error {}", e.getMessage());
             return new ProcessResult(1, "ERROR");

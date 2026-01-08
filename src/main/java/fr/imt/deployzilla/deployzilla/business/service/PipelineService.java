@@ -27,6 +27,8 @@ public class PipelineService {
     private final PipelineRepository pipelineRepository;
     private final CommandFactory commandFactory;
     private final StringRedisTemplate redisTemplate;
+    // Inject MongoTemplate for partial updates
+    private final org.springframework.data.mongodb.core.MongoTemplate mongoTemplate;
 
     private void publishStatus(String pipelineId, String status, String currentStep) {
         try {
@@ -54,6 +56,11 @@ public class PipelineService {
         pipeline.setProjectId(projectId);
         pipeline.setCommitHash(commitHash);
         pipeline.setAuthor(author);
+        
+        if (commitHash == null || commitHash.isEmpty()) {
+            pipeline.setTrigger("manual");
+        }
+        
         Pipeline saved = pipelineRepository.save(pipeline);
         publishStatus(saved.getId(), "CREATED", null);
         return saved;
@@ -95,6 +102,30 @@ public class PipelineService {
             if (result.getExitCode() == 0) {
                 log.info("Job {} succeeded.", job.getId());
                 job.setStatus("SUCCESS");
+
+                // Update commit hash if missing and this was the clone step
+                if (JobType.CLONE.equals(job.getJobType()) &&
+                        (pipeline.getCommitHash() == null || pipeline.getCommitHash().isEmpty())) {
+                    String output = result.getOutput();
+                    // Basic validation: Hash is typically 40 chars hex
+                    if (output != null && output.length() == 40 && !output.contains(" ")) {
+                        log.info("Updating pipeline {} commit hash to {}", pipelineId, output);
+                        
+                        // Use MongoTemplate for partial update to avoid overwriting other fields
+                        mongoTemplate.updateFirst(
+                            org.springframework.data.mongodb.core.query.Query.query(
+                                org.springframework.data.mongodb.core.query.Criteria.where("_id").is(pipelineId)
+                            ),
+                            org.springframework.data.mongodb.core.query.Update.update("commitHash", output),
+                            Pipeline.class
+                        );
+                        
+                        // Update in-memory object too so subsequent saves don't revert it (though save overwrites anyway)
+                        // But strictly speaking, if we just want to persist hash without touching others, 
+                        // we've done it in DB. For the current flow, we keep the object in sync.
+                        pipeline.setCommitHash(output);
+                    }
+                }
             } else {
                 log.warn("Job {} failed. Exit code: {}", job.getId(), result.getExitCode());
                 job.setStatus("FAILED");
