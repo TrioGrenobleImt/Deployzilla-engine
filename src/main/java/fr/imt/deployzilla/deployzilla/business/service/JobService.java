@@ -110,7 +110,7 @@ public class JobService {
         try {
             return npmBuildService.execute(
                     pipelineId,
-                    PROJECT_DIR
+                    projectDir
             ).get();
         } catch (InterruptedException | ExecutionException e) {
             log.error("Error {}", e.getMessage());
@@ -120,13 +120,13 @@ public class JobService {
 
     public ProcessResult createImage(String projectId, String pipelineId) {
         log.info("Creating image for pipeline: {}", pipelineId);
-        Project project = projectRepository.findById(new ObjectId(projectId))
+        Project project = projectRepositoryPort.findById(projectId)
                 .orElseThrow(() -> new ProjectNotFoundException(projectId));
         
         try {
             return imageBuildService.execute(
                     pipelineId,
-                    PROJECT_DIR,
+                    projectDir,
                     project.getRepoUrl()
             ).get();
         } catch (InterruptedException | ExecutionException e) {
@@ -137,7 +137,7 @@ public class JobService {
 
     public ProcessResult runApp(String projectId, String pipelineId) {
         log.info("Running app for pipeline: {}", pipelineId);
-        Project project = projectRepository.findById(new ObjectId(projectId))
+        Project project = projectRepositoryPort.findById(projectId)
                 .orElseThrow(() -> new ProjectNotFoundException(projectId));
 
         Map<String, String> envVars = project.getEnvVars().stream()
