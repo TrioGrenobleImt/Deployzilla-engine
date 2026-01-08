@@ -9,6 +9,7 @@ import fr.imt.deployzilla.deployzilla.infrastructure.persistence.Project;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -24,8 +25,12 @@ public class AppRunService {
     private final PipelineRepositoryPort pipelineRepositoryPort;
     private final ProjectRepositoryPort projectRepositoryPort;
 
+    @Value("${deployzilla.docker.registry.username:}")
+    private String registryUsername;
+
     public CompletableFuture<ProcessResult> execute(String pipelineId, Map<String, String> envVars) {
-        String imageName = "deployzilla-app-" + pipelineId + ":latest";
+        String registryPrefix = (registryUsername != null && !registryUsername.isBlank()) ? registryUsername + "/" : "";
+        String imageName = registryPrefix + "deployzilla-app-" + pipelineId + ":latest";
 
         log.info("Running application {} for pipeline {}", imageName, pipelineId);
 
