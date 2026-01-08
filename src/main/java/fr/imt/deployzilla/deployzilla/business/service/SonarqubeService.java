@@ -1,28 +1,29 @@
-package fr.imt.deployzilla.deployzilla.infrastructure.service;
+package fr.imt.deployzilla.deployzilla.business.service;
 
 import fr.imt.deployzilla.deployzilla.business.model.ProcessResult;
-import fr.imt.deployzilla.deployzilla.business.service.ContainerExecutor;
 import fr.imt.deployzilla.deployzilla.business.utils.DirectorySanitizer;
-import fr.imt.deployzilla.deployzilla.infrastructure.persistence.Project;
-import fr.imt.deployzilla.deployzilla.infrastructure.persistence.client.SonarQubeClient;
+import fr.imt.deployzilla.deployzilla.infrastructure.client.SonarQubeClient;
+import fr.imt.deployzilla.deployzilla.business.model.SonarTokenResponse;
+import fr.imt.deployzilla.deployzilla.infrastructure.persistence.Pipeline;
+import fr.imt.deployzilla.deployzilla.infrastructure.persistence.repository.PipelineRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.nio.channels.Pipe;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class SonarTokenService {
+public class SonarqubeService {
 
-    private static final String NODE_IMAGE = "deployzilla/step:npm-lint";
+    private static final String NODE_IMAGE = "deployzilla/step:sonarqube";
     private static final String CONTAINER_WORKSPACE_PATH = "/workspace";
 
     private final SonarQubeClient sonarQubeClient;
@@ -38,6 +39,11 @@ public class SonarTokenService {
     @Value("${sonar.web.password}")
     private String sonarPassword;
 
+    @Value("${sonar.url}")
+    private String sonarUrl;
+
+    private final PipelineRepository pipelineRepository;
+
     public String getSonarToken() {
         String auth = sonarUsername + ":" + sonarPassword;
         String encodedAuth = Base64.getEncoder().encodeToString(auth.getBytes(StandardCharsets.UTF_8));
@@ -48,7 +54,7 @@ public class SonarTokenService {
                 "CI-Auto-Token-" + System.currentTimeMillis(),
                 "GLOBAL_ANALYSIS_TOKEN"
         );
-
+        log.info("Generating token for sonar user: {}. Token is {}", sonarUsername, response.getToken());
         return response.getToken();
     }
 
@@ -61,6 +67,11 @@ public class SonarTokenService {
                 hostProjectPath + ":" + CONTAINER_WORKSPACE_PATH
         );
 
+        // Using
+        Pipeline pipeline = pipelineRepository.findById(pipelineId)
+                .orElseThrow(() -> new RuntimeException("Pipeline not found"));
+        String projectId = pipeline.getProjectId();
+
         log.info("Running ESLint for pipeline {} in {}", pipelineId, sanitizedDir);
 
         return containerExecutor.executeStep(
@@ -68,7 +79,10 @@ public class SonarTokenService {
                 stepId,
                 NODE_IMAGE,
                 volumes,
-                Map.of("SONAR_PROJECT_KEY", token)
+                Map.of("SONAR_TOKEN", token,
+                        "SONAR_PROJECT_KEY", projectId,
+                        "SONAR_HOST_URL", sonarUrl
+                )
         );
     }
 

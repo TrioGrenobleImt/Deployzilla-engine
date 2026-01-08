@@ -1,4 +1,4 @@
-package fr.imt.deployzilla.deployzilla.infrastructure.service;
+package fr.imt.deployzilla.deployzilla.business.model;
 
 import lombok.Value;
 

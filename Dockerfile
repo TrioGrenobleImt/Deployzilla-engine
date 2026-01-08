@@ -10,7 +10,5 @@ FROM eclipse-temurin:21-jre-alpine
 RUN apk add --no-cache bash
 WORKDIR /app
 COPY --from=build /app/target/*.jar app.jar
-COPY --from=build /app/src/main/resources/scripts /app/scripts
-RUN chmod +x /app/scripts/*.sh
 EXPOSE 8081
 ENTRYPOINT ["java", "-jar", "app.jar"]

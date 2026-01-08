@@ -146,6 +146,7 @@ public class ContainerExecutor {
                     .withMemorySwap(memoryLimit) // Disable swap
                     .withCpuQuota(50000L)        // 50% CPU limit
                     .withCpuPeriod(100000L)
+                    .withNetworkMode("deployzilla")
                     .withBinds(binds)
                     .withAutoRemove(false);      // We'll remove manually after logs
 

@@ -4,7 +4,6 @@ import fr.imt.deployzilla.deployzilla.exception.ProjectNotFoundException;
 import fr.imt.deployzilla.deployzilla.business.model.ProcessResult;
 import fr.imt.deployzilla.deployzilla.infrastructure.persistence.Project;
 import fr.imt.deployzilla.deployzilla.infrastructure.persistence.repository.ProjectRepository;
-import fr.imt.deployzilla.deployzilla.infrastructure.service.SonarTokenService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.bson.types.ObjectId;
@@ -27,7 +26,7 @@ public class JobService {
 
     private static final String PROJECT_DIR = "/tmp/deployzilla";
 
-    private final SonarTokenService sonarTokenService;
+    private final SonarqubeService sonarTokenService;
 
     public ProcessResult cloneGitRepository(String projectId, String pipelineId) {
         Project project = projectRepository.findById(new ObjectId(projectId))

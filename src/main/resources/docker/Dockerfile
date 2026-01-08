@@ -40,7 +40,7 @@ RUN chmod +x /run-node-script.sh
 CMD ["/run-node-script.sh", "install"]
 
 # Stage 5 : SonarQube analysis
-FROM sonarsource/sonar-scanner-cli:latest
+FROM sonarsource/sonar-scanner-cli:latest as sonarqube
 
 USER root
 

@@ -82,6 +82,7 @@ services:
     ports:
       - '9000:9000'
     networks:
+      - deployzilla
       - sonarnet
     environment:
       - SONAR_JDBC_URL=jdbc:postgresql://sonar_db:5432/sonar
@@ -151,10 +152,12 @@ services:
     entrypoint: [ "true" ]
     networks:
       - deployzilla
+      - sonarnet
 
 networks:
   sonarnet:
   deployzilla:
+    name: deployzilla
 
 volumes:
   mongo-data:
