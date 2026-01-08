@@ -9,13 +9,12 @@ import com.github.dockerjava.core.DefaultDockerClientConfig;
 import com.github.dockerjava.core.DockerClientBuilder;
 import com.github.dockerjava.httpclient5.ApacheDockerHttpClient;
 import fr.imt.deployzilla.deployzilla.business.model.ProcessResult;
-import fr.imt.deployzilla.deployzilla.configuration.RedisConfiguration;
+import fr.imt.deployzilla.deployzilla.business.port.ProcessLogPublisherPort;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -38,7 +37,7 @@ public class ContainerExecutor {
     private static final String PIPELINE_LABEL = "deployzilla.pipeline-id";
     private static final String STEP_LABEL = "deployzilla.step-id";
 
-    private final StringRedisTemplate redisTemplate;
+    private final ProcessLogPublisherPort processLogPublisherPort;
 
     @Value("${docker.host:unix:///var/run/docker.sock}")
     private String dockerHost;
@@ -205,10 +204,6 @@ public class ContainerExecutor {
      * Pull image if not already present locally.
      * Always pulls if the image uses a specific tag to ensure we have the correct version.
      */
-    /**
-     * Pull image if not already present locally.
-     * Always pulls if the image uses a specific tag to ensure we have the correct version.
-     */
     private void pullImageIfNeeded(String pipelineId, String image) {
         // Normalize image name to always have a tag for comparison
         String imageToCheck = image.contains(":") ? image : image + ":latest";
@@ -222,17 +217,17 @@ public class ContainerExecutor {
                     .exec();
 
             boolean exists = images.stream()
-                    .anyMatch(img -> img.getRepoTags() != null && 
+                    .anyMatch(img -> img.getRepoTags() != null &&
                             java.util.Arrays.asList(img.getRepoTags()).contains(imageToCheck));
 
             if (!exists) {
                 publishLog(pipelineId, String.format("Pulling image: %s", imageToCheck));
                 log.info("Pulling Docker image: {}", imageToCheck);
-                
+
                 dockerClient.pullImageCmd(imageToCheck)
                         .start()
                         .awaitCompletion(5, TimeUnit.MINUTES);
-                
+
                 publishLog(pipelineId, "Image pulled successfully");
                 log.info("Successfully pulled image: {}", imageToCheck);
             }
@@ -315,7 +310,6 @@ public class ContainerExecutor {
     }
 
     private void publishLog(String pipelineId, String message) {
-        String payload = pipelineId + "|" + message;
-        redisTemplate.convertAndSend(RedisConfiguration.LOGS_TOPIC, payload);
+        processLogPublisherPort.publish(pipelineId, message);
     }
 }

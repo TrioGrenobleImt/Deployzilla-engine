@@ -11,7 +11,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.nio.channels.Pipe;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.List;
@@ -81,7 +80,8 @@ public class SonarqubeService {
                 volumes,
                 Map.of("SONAR_TOKEN", token,
                         "SONAR_PROJECT_KEY", projectId,
-                        "SONAR_HOST_URL", sonarUrl
+                        "SONAR_HOST_URL", sonarUrl,
+                        "SONAE_ARGS", "-Dsonar.javascript.lcov.reportPaths=coverage/lcov.info"
                 )
         );
     }

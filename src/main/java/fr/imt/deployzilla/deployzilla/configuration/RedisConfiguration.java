@@ -1,6 +1,6 @@
 package fr.imt.deployzilla.deployzilla.configuration;
 
-import fr.imt.deployzilla.deployzilla.business.service.RedisPipelineStatusSubscriber;
+import fr.imt.deployzilla.deployzilla.infrastructure.websocket.RedisPipelineStatusSubscriber;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;

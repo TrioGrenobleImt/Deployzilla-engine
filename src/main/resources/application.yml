@@ -18,3 +18,7 @@ sonar:
     username: admin
     password: "SyQ7WTN2fh5ju45k8Fz!"
   url: http://sonarqube:9000
+
+deployzilla:
+  workspace:
+    path: /tmp/deployzilla
