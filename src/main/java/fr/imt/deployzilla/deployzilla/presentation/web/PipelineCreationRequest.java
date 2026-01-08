@@ -11,4 +11,6 @@ public class PipelineCreationRequest {
 
     String author;
 
+    String trigger;
+
 }
