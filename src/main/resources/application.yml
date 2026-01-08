@@ -12,3 +12,9 @@ spring:
       database: ${SPRING_DATA_MONGODB_DATABASE:deployzilla}
 server:
   port: 8081
+
+sonar:
+  web:
+    username: admin
+    password: admin
+  url: http://sonar:9000

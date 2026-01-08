@@ -5,7 +5,7 @@ import fr.imt.deployzilla.deployzilla.business.service.JobService;
 import lombok.RequiredArgsConstructor;
 
 @RequiredArgsConstructor
-public class FetchProjectCommand implements Command {
+public class GitCloneCommand implements Command {
 
     private final JobService jobService;
 

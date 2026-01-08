@@ -18,7 +18,6 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.Iterator;
 
-
 @Service
 @Slf4j
 @RequiredArgsConstructor
@@ -53,6 +52,7 @@ public class PipelineService {
         pipeline.addJob(new Job(JobType.NPM_INSTALL));
         pipeline.addJob(new Job(JobType.NPM_LINT));
         pipeline.addJob(new Job(JobType.NPM_TEST));
+        pipeline.addJob(new Job(JobType.SONAR));
         pipeline.setProjectId(projectId);
         pipeline.setCommitHash(commitHash);
         pipeline.setAuthor(author);

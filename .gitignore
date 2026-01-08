@@ -33,3 +33,5 @@ build/
 .vscode/
 deployzilla-workspaces/
 deployzilla-keys/
+
+secret.yml

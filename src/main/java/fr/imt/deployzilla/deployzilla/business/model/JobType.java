@@ -7,7 +7,8 @@ public enum JobType {
     CLONE("CLONE"),
     NPM_INSTALL("NPM-INSTALL"),
     NPM_LINT("NPM-LINT"),
-    NPM_TEST("NPM-TEST");
+    NPM_TEST("NPM-TEST"),
+    SONAR("SONAR");
 
     private final String commandName;
 

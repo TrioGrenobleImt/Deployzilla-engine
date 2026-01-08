@@ -1,6 +1,5 @@
 package fr.imt.deployzilla.deployzilla.configuration;
 
-import fr.imt.deployzilla.deployzilla.business.service.RedisLogSubscriber;
 import fr.imt.deployzilla.deployzilla.business.service.RedisPipelineStatusSubscriber;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -26,11 +25,6 @@ public class RedisConfiguration {
         container.addMessageListener(logListenerAdapter, new ChannelTopic(LOGS_TOPIC));
         container.addMessageListener(statusListenerAdapter, new ChannelTopic(PIPELINE_STATUS_TOPIC));
         return container;
-    }
-
-    @Bean
-    MessageListenerAdapter logListenerAdapter(RedisLogSubscriber subscriber) {
-        return new MessageListenerAdapter(subscriber, "onMessage");
     }
 
     @Bean

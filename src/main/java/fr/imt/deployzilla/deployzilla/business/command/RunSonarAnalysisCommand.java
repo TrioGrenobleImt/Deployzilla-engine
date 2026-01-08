@@ -5,7 +5,7 @@ import fr.imt.deployzilla.deployzilla.business.service.JobService;
 import lombok.RequiredArgsConstructor;
 
 @RequiredArgsConstructor
-public class RunUnitTestsCommand implements Command {
+public class RunSonarAnalysisCommand implements Command{
 
     private final JobService jobService;
 
@@ -13,7 +13,7 @@ public class RunUnitTestsCommand implements Command {
 
     @Override
     public ProcessResult execute() {
-        return jobService.runUnitTests(pipelineId);
+        return jobService.runSonarAnalysis(pipelineId);
     }
 
 }

@@ -87,7 +87,6 @@ public class ContainerExecutor {
      * @param pipelineId Unique pipeline identifier
      * @param stepId     Unique step identifier
      * @param image      Docker image to use (e.g., "alpine/git")
-     * @param command    Command to execute
      * @param volumes    Optional volume bindings (host:container)
      * @param envVars    Optional environment variables
      * @return CompletableFuture with exit code

@@ -4,13 +4,14 @@ import fr.imt.deployzilla.deployzilla.exception.ProjectNotFoundException;
 import fr.imt.deployzilla.deployzilla.business.model.ProcessResult;
 import fr.imt.deployzilla.deployzilla.infrastructure.persistence.Project;
 import fr.imt.deployzilla.deployzilla.infrastructure.persistence.repository.ProjectRepository;
+import fr.imt.deployzilla.deployzilla.infrastructure.service.SonarTokenService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.bson.types.ObjectId;
 import org.springframework.stereotype.Service;
 
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
-
 
 @Service
 @RequiredArgsConstructor
@@ -26,15 +27,18 @@ public class JobService {
 
     private static final String PROJECT_DIR = "/tmp/deployzilla";
 
+    private final SonarTokenService sonarTokenService;
+
     public ProcessResult cloneGitRepository(String projectId, String pipelineId) {
         Project project = projectRepository.findById(new ObjectId(projectId))
                 .orElseThrow(() -> new ProjectNotFoundException(projectId));
 
-        try {
-            ProcessResult cloneResult = gitCloneService.execute(
-                    pipelineId, project, PROJECT_DIR
-            ).get();
+        ProcessResult cloneResult = executeCompletableFuture(
+                gitCloneService.execute(pipelineId, project, PROJECT_DIR),
+                "git clone"
+        );
 
+        try {
             if (cloneResult.getExitCode() == 0) {
                 // If clone successful, try to retrieve commit hash
                 String hash = gitCloneService.retrieveCommitHash(pipelineId, PROJECT_DIR).get();
@@ -46,40 +50,45 @@ public class JobService {
             return cloneResult;
 
         } catch (InterruptedException | ExecutionException e) {
-            log.error("Error {}", e.getMessage());
+            log.error("Error running step git clone {}", e.getMessage());
             return new ProcessResult(1, "ERROR");
         }
+
     }
 
-    public ProcessResult runNpmInstall(String projectId, String pipelineId) {
-        log.info("Running NPM install for pipeline: {}", pipelineId);
-        try {
-            return npmInstallService.execute(
-                    pipelineId,
-                    PROJECT_DIR
-            ).get();
-        } catch (InterruptedException | ExecutionException e) {
-            log.error("Error {}", e.getMessage());
-            return new ProcessResult(1, "ERROR");
-        }
+    public ProcessResult runNpmInstall(String pipelineId) {
+        return executeCompletableFuture(
+                npmInstallService.execute(pipelineId, PROJECT_DIR),
+                "npm install"
+        );
     }
 
-    public ProcessResult runEslint(String projectId, String pipelineId) {
-        // We might not strictly need projectId if the path is fixed,
-        // but keeping the signature consistent with other methods if validation is needed later.
-        try {
-            return eslintService.execute(pipelineId, PROJECT_DIR).get();
-        } catch (InterruptedException | ExecutionException e) {
-            log.error("Error running eslint {}", e.getMessage());
-            return new ProcessResult(1, "ERROR");
-        }
+    public ProcessResult runEslint(String pipelineId) {
+        return executeCompletableFuture(
+                eslintService.execute(pipelineId, PROJECT_DIR),
+                "eslint"
+        );
     }
 
-    public ProcessResult runUnitTests(String projectId, String pipelineId) {
+    public ProcessResult runUnitTests(String pipelineId) {
+        return executeCompletableFuture(
+                unitTestService.execute(pipelineId, PROJECT_DIR),
+                "unit tests");
+    }
+
+    public ProcessResult runSonarAnalysis(String pipelineId) {
+        String token = sonarTokenService.getSonarToken();
+        return executeCompletableFuture(
+                sonarTokenService.runAnalysis(pipelineId, PROJECT_DIR, token),
+                "sonarQube"
+        );
+    }
+
+    private ProcessResult executeCompletableFuture(CompletableFuture<ProcessResult> completableFuture, String stepName) {
         try {
-            return unitTestService.execute(pipelineId, PROJECT_DIR).get();
+            return completableFuture.get();
         } catch (InterruptedException | ExecutionException e) {
-            log.error("Error running unit tests {}", e.getMessage());
+            log.error("Error running step {} {}", stepName, e.getMessage());
             return new ProcessResult(1, "ERROR");
         }
     }

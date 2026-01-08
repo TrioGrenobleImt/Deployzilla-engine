@@ -39,3 +39,17 @@ RUN chmod +x /run-node-script.sh
 
 CMD ["/run-node-script.sh", "install"]
 
+# Stage 5 : SonarQube analysis
+FROM sonarsource/sonar-scanner-cli:latest
+
+USER root
+
+WORKDIR /workspace
+
+# 5. Runtime Command
+# We override the ENTRYPOINT to run a shell.
+# This ensures that ${SONAR_PROJECT_KEY} is replaced by its value at runtime.
+ENTRYPOINT ["/bin/sh", "-c"]
+
+# Run the scanner passing the env vars
+CMD ["sonar-scanner -Dsonar.projectKey=${SONAR_PROJECT_KEY} -Dsonar.sources=."]

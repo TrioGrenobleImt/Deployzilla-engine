@@ -143,6 +143,15 @@ services:
     networks:
       - deployzilla
 
+  step-sonarqube-analysis:
+    image: deployzilla/step:sonarqube
+    build:
+      context: ./src/main/resources/docker
+      target: sonarqube
+    entrypoint: [ "true" ]
+    networks:
+      - deployzilla
+
 networks:
   sonarnet:
   deployzilla:

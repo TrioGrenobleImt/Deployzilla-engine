@@ -9,13 +9,11 @@ public class RunEslintCommand implements Command {
 
     private final JobService jobService;
 
-    private final String projectId;
-
     private final String pipelineId;
 
     @Override
     public ProcessResult execute() {
-        return jobService.runEslint(projectId, pipelineId);
+        return jobService.runEslint(pipelineId);
     }
 
 }
