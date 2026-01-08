@@ -50,9 +50,12 @@ public class PipelineService {
         // Clone project job
         pipeline.addJob(new Job(JobType.CLONE));
         pipeline.addJob(new Job(JobType.NPM_INSTALL));
-        pipeline.addJob(new Job(JobType.NPM_LINT));
-        pipeline.addJob(new Job(JobType.NPM_TEST));
-        pipeline.addJob(new Job(JobType.SONAR));
+        // pipeline.addJob(new Job(JobType.NPM_LINT));
+        // pipeline.addJob(new Job(JobType.NPM_TEST));
+        // pipeline.addJob(new Job(JobType.SONAR));
+        pipeline.addJob(new Job(JobType.NPM_BUILD));
+        pipeline.addJob(new Job(JobType.IMAGE_BUILD));
+        pipeline.addJob(new Job(JobType.APP_RUN));
         pipeline.setProjectId(projectId);
         pipeline.setCommitHash(commitHash);
         pipeline.setAuthor(author);

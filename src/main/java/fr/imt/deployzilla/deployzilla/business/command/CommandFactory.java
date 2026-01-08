@@ -29,6 +29,15 @@ public class CommandFactory {
 
         registry.put(JobType.SONAR.getCommandName(), (projectId, pipelineId) ->
                 new RunSonarAnalysisCommand(jobService, pipelineId));
+
+        registry.put(JobType.NPM_BUILD.getCommandName(), (projectId, pipelineId) ->
+                new RunNpmBuildCommand(jobService, pipelineId));
+
+        registry.put(JobType.IMAGE_BUILD.getCommandName(), (projectId, pipelineId) ->
+                new CreateImageCommand(jobService, pipelineId, projectId));
+
+        registry.put(JobType.APP_RUN.getCommandName(), (projectId, pipelineId) ->
+                new RunAppCommand(jobService, projectId, pipelineId));
     }
 
     public Command create(String commandName, String projectId, String pipelineId) {
