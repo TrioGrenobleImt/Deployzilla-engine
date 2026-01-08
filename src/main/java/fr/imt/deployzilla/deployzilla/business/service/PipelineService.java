@@ -2,16 +2,14 @@ package fr.imt.deployzilla.deployzilla.business.service;
 
 import fr.imt.deployzilla.deployzilla.business.command.Command;
 import fr.imt.deployzilla.deployzilla.business.command.CommandFactory;
+import fr.imt.deployzilla.deployzilla.business.model.JobType;
 import fr.imt.deployzilla.deployzilla.business.model.ProcessResult;
+import fr.imt.deployzilla.deployzilla.business.port.PipelineRepositoryPort;
+import fr.imt.deployzilla.deployzilla.business.port.PipelineStatusPublisherPort;
 import fr.imt.deployzilla.deployzilla.infrastructure.persistence.Job;
 import fr.imt.deployzilla.deployzilla.infrastructure.persistence.Pipeline;
-import fr.imt.deployzilla.deployzilla.infrastructure.persistence.repository.PipelineRepository;
-import fr.imt.deployzilla.deployzilla.configuration.RedisConfiguration;
-import fr.imt.deployzilla.deployzilla.business.model.JobType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -23,23 +21,12 @@ import java.util.Iterator;
 @RequiredArgsConstructor
 public class PipelineService {
 
-    private final PipelineRepository pipelineRepository;
+    private final PipelineRepositoryPort pipelineRepositoryPort;
+    private final PipelineStatusPublisherPort pipelineStatusPublisherPort;
     private final CommandFactory commandFactory;
-    private final StringRedisTemplate redisTemplate;
-    // Inject MongoTemplate for partial updates
-    private final org.springframework.data.mongodb.core.MongoTemplate mongoTemplate;
 
     private void publishStatus(String pipelineId, String status, String currentStep) {
-        try {
-            // Simple protocol: pipelineId|status|currentStep
-            String message = String.format("%s|%s|%s", 
-                pipelineId, 
-                status, 
-                currentStep != null ? currentStep : "");
-            redisTemplate.convertAndSend(RedisConfiguration.PIPELINE_STATUS_TOPIC, message);
-        } catch (Exception e) {
-            log.error("Failed to publish pipeline status", e);
-        }
+        pipelineStatusPublisherPort.publish(pipelineId, status, currentStep);
     }
 
     /**
@@ -56,12 +43,12 @@ public class PipelineService {
         pipeline.setProjectId(projectId);
         pipeline.setCommitHash(commitHash);
         pipeline.setAuthor(author);
-        
+
         if (commitHash == null || commitHash.isEmpty()) {
             pipeline.setTrigger("manual");
         }
-        
-        Pipeline saved = pipelineRepository.save(pipeline);
+
+        Pipeline saved = pipelineRepositoryPort.save(pipeline);
         publishStatus(saved.getId(), "CREATED", null);
         return saved;
     }
@@ -71,81 +58,91 @@ public class PipelineService {
      */
     @Async
     public void runPipeline(String pipelineId) {
-        Pipeline pipeline = pipelineRepository.findById(pipelineId)
-                .orElseThrow(() -> new RuntimeException("Not Found"));
+        Pipeline pipeline = pipelineRepositoryPort.findById(pipelineId)
+                .orElseThrow(() -> new RuntimeException("Pipeline not found: " + pipelineId));
 
+        initializePipelineRun(pipeline);
+
+        boolean success = executeJobs(pipeline);
+
+        finalizePipelineRun(pipeline, success);
+    }
+
+    private void initializePipelineRun(Pipeline pipeline) {
         pipeline.setStatus("RUNNING");
+        pipelineRepositoryPort.save(pipeline);
         log.info("Pipeline {} started", pipeline.getId());
-        pipelineRepository.save(pipeline);
-        // publishStatus(pipelineId, "RUNNING", null);
+        publishStatus(pipeline.getId(), "RUNNING", null);
+    }
 
-        boolean chainBroken = false;
-
-        Iterator<Job> iterator = pipeline.getJobs().iterator();
-        while (iterator.hasNext() && !chainBroken) {
-            Job job = iterator.next();
-
-            log.info("Job {} running.", job.getId());
-
-            job.setStartTime(LocalDateTime.now());
-            job.setStatus("RUNNING");
-
-            pipelineRepository.save(pipeline);
-            publishStatus(pipelineId, "RUNNING", job.getJobType().getCommandName());
-
-            Command command = commandFactory.create(job.getJobType().getCommandName(), pipeline.getProjectId(), pipelineId);
-
-            ProcessResult result = command.execute();
-
-            job.setEndTime(LocalDateTime.now());
-
-            if (result.getExitCode() == 0) {
-                log.info("Job {} succeeded.", job.getId());
-                job.setStatus("SUCCESS");
-
-                // Update commit hash if missing and this was the clone step
-                if (JobType.CLONE.equals(job.getJobType()) &&
-                        (pipeline.getCommitHash() == null || pipeline.getCommitHash().isEmpty())) {
-                    String output = result.getOutput();
-                    // Basic validation: Hash is typically 40 chars hex
-                    if (output != null && output.length() == 40 && !output.contains(" ")) {
-                        log.info("Updating pipeline {} commit hash to {}", pipelineId, output);
-                        
-                        // Use MongoTemplate for partial update to avoid overwriting other fields
-                        mongoTemplate.updateFirst(
-                            org.springframework.data.mongodb.core.query.Query.query(
-                                org.springframework.data.mongodb.core.query.Criteria.where("_id").is(pipelineId)
-                            ),
-                            org.springframework.data.mongodb.core.query.Update.update("commitHash", output),
-                            Pipeline.class
-                        );
-                        
-                        // Update in-memory object too so subsequent saves don't revert it (though save overwrites anyway)
-                        // But strictly speaking, if we just want to persist hash without touching others, 
-                        // we've done it in DB. For the current flow, we keep the object in sync.
-                        pipeline.setCommitHash(output);
-                    }
-                }
-            } else {
-                log.warn("Job {} failed. Exit code: {}", job.getId(), result.getExitCode());
-                job.setStatus("FAILED");
-                chainBroken = true;
+    private boolean executeJobs(Pipeline pipeline) {
+        for (Job job : pipeline.getJobs()) {
+            ProcessResult result = executeJob(job, pipeline);
+            if (result.getExitCode() != 0) {
+                handleFailedJob(job, result, pipeline);
+                return false; // Stop execution
             }
+            handleSuccessfulJob(job, result, pipeline);
+        }
+        return true;
+    }
 
-            pipelineRepository.save(pipeline);
+    private ProcessResult executeJob(Job job, Pipeline pipeline) {
+        log.info("Job {} of type {} running.", job.getId(), job.getJobType());
+        job.setStartTime(LocalDateTime.now());
+        job.setStatus("RUNNING");
+        pipelineRepositoryPort.save(pipeline);
+        publishStatus(pipeline.getId(), "RUNNING", job.getJobType().getCommandName());
+
+        Command command = commandFactory.create(job.getJobType().getCommandName(), pipeline.getProjectId(), pipeline.getId());
+        ProcessResult result = command.execute();
+
+        job.setEndTime(LocalDateTime.now());
+        return result;
+    }
+
+    private void handleSuccessfulJob(Job job, ProcessResult result, Pipeline pipeline) {
+        log.info("Job {} succeeded.", job.getId());
+        job.setStatus("SUCCESS");
+
+        if (isCloneJobWithMissingHash(job, pipeline)) {
+            updateCommitHashFromClone(result.getOutput(), pipeline);
         }
 
-        if (!chainBroken) {
-            log.info("Pipeline {} succeeded", pipeline.getId());
+        pipelineRepositoryPort.save(pipeline);
+    }
+
+    private void handleFailedJob(Job job, ProcessResult result, Pipeline pipeline) {
+        log.warn("Job {} failed. Exit code: {}", job.getId(), result.getExitCode());
+        job.setStatus("FAILED");
+        pipelineRepositoryPort.save(pipeline);
+    }
+
+    private void finalizePipelineRun(Pipeline pipeline, boolean success) {
+        if (success) {
             pipeline.setStatus("SUCCESS");
-            pipelineRepository.save(pipeline);
-            publishStatus(pipelineId, "SUCCESS", null);
+            log.info("Pipeline {} succeeded", pipeline.getId());
+            publishStatus(pipeline.getId(), "SUCCESS", null);
         } else {
-            log.warn("Pipeline {} failed", pipeline.getId());
             pipeline.setStatus("FAILED");
-            publishStatus(pipelineId, "FAILED", null);
+            log.warn("Pipeline {} failed", pipeline.getId());
+            publishStatus(pipeline.getId(), "FAILED", null);
         }
-        pipelineRepository.save(pipeline);
+        pipelineRepositoryPort.save(pipeline);
+    }
+
+    private boolean isCloneJobWithMissingHash(Job job, Pipeline pipeline) {
+        return JobType.CLONE.equals(job.getJobType()) &&
+                (pipeline.getCommitHash() == null || pipeline.getCommitHash().isEmpty());
+    }
+
+    private void updateCommitHashFromClone(String output, Pipeline pipeline) {
+        // Basic validation: Hash is typically 40 chars hex
+        if (output != null && output.length() == 40 && !output.contains(" ")) {
+            log.info("Updating pipeline {} commit hash to {}", pipeline.getId(), output);
+            pipelineRepositoryPort.updateCommitHash(pipeline.getId(), output);
+            pipeline.setCommitHash(output); // Update in-memory object
+        }
     }
 
 }

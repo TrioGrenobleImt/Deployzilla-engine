@@ -1,12 +1,12 @@
 package fr.imt.deployzilla.deployzilla.business.service;
 
+import fr.imt.deployzilla.deployzilla.business.port.ProjectRepositoryPort;
 import fr.imt.deployzilla.deployzilla.exception.ProjectNotFoundException;
 import fr.imt.deployzilla.deployzilla.business.model.ProcessResult;
 import fr.imt.deployzilla.deployzilla.infrastructure.persistence.Project;
-import fr.imt.deployzilla.deployzilla.infrastructure.persistence.repository.ProjectRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.bson.types.ObjectId;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.concurrent.CompletableFuture;
@@ -17,30 +17,30 @@ import java.util.concurrent.ExecutionException;
 @Slf4j
 public class JobService {
 
-    private final ProjectRepository projectRepository;
+    private final ProjectRepositoryPort projectRepositoryPort;
 
     private final GitCloneService gitCloneService;
     private final EslintService eslintService;
     private final UnitTestService unitTestService;
     private final NpmInstallService npmInstallService;
-
-    private static final String PROJECT_DIR = "/tmp/deployzilla";
-
     private final SonarqubeService sonarTokenService;
 
+    @Value("${deployzilla.workspace.path}")
+    private String projectDir;
+
     public ProcessResult cloneGitRepository(String projectId, String pipelineId) {
-        Project project = projectRepository.findById(new ObjectId(projectId))
+        Project project = projectRepositoryPort.findById(projectId)
                 .orElseThrow(() -> new ProjectNotFoundException(projectId));
 
         ProcessResult cloneResult = executeCompletableFuture(
-                gitCloneService.execute(pipelineId, project, PROJECT_DIR),
+                gitCloneService.execute(pipelineId, project, projectDir),
                 "git clone"
         );
 
         try {
             if (cloneResult.getExitCode() == 0) {
                 // If clone successful, try to retrieve commit hash
-                String hash = gitCloneService.retrieveCommitHash(pipelineId, PROJECT_DIR).get();
+                String hash = gitCloneService.retrieveCommitHash(pipelineId, projectDir).get();
                 if (hash != null && !hash.isEmpty()) {
                     // Return the hash as output
                     return new ProcessResult(0, hash);
@@ -57,28 +57,28 @@ public class JobService {
 
     public ProcessResult runNpmInstall(String pipelineId) {
         return executeCompletableFuture(
-                npmInstallService.execute(pipelineId, PROJECT_DIR),
+                npmInstallService.execute(pipelineId, projectDir),
                 "npm install"
         );
     }
 
     public ProcessResult runEslint(String pipelineId) {
         return executeCompletableFuture(
-                eslintService.execute(pipelineId, PROJECT_DIR),
+                eslintService.execute(pipelineId, projectDir),
                 "eslint"
         );
     }
 
     public ProcessResult runUnitTests(String pipelineId) {
         return executeCompletableFuture(
-                unitTestService.execute(pipelineId, PROJECT_DIR),
+                unitTestService.execute(pipelineId, projectDir),
                 "unit tests");
     }
 
     public ProcessResult runSonarAnalysis(String pipelineId) {
         String token = sonarTokenService.getSonarToken();
         return executeCompletableFuture(
-                sonarTokenService.runAnalysis(pipelineId, PROJECT_DIR, token),
+                sonarTokenService.runAnalysis(pipelineId, projectDir, token),
                 "sonarQube"
         );
     }

@@ -26,7 +26,7 @@ RUN corepack enable
 COPY scripts/run-node-script.sh /run-node-script.sh
 RUN chmod +x /run-node-script.sh
 
-CMD ["/run-node-script.sh", "test"]
+CMD ["/run-node-script.sh", "test", "--coverage"]
 
 # Stage 4: NPM Install
 FROM node:22-alpine AS npm-install
@@ -52,4 +52,4 @@ WORKDIR /workspace
 ENTRYPOINT ["/bin/sh", "-c"]
 
 # Run the scanner passing the env vars
-CMD ["sonar-scanner -Dsonar.projectKey=${SONAR_PROJECT_KEY} -Dsonar.sources=."]
+CMD ["sonar-scanner -Dsonar.projectKey=${SONAR_PROJECT_KEY} -Dsonar.sources=. ${SONAR_ARGS}"]

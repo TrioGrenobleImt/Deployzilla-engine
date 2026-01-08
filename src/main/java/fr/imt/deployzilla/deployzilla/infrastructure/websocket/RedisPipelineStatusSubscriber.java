@@ -1,4 +1,4 @@
-package fr.imt.deployzilla.deployzilla.business.service;
+package fr.imt.deployzilla.deployzilla.infrastructure.websocket;
 
 import fr.imt.deployzilla.deployzilla.business.model.PipelineStatusUpdate;
 import lombok.extern.slf4j.Slf4j;
