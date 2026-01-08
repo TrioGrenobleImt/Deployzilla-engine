@@ -28,6 +28,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import com.github.dockerjava.api.command.BuildImageResultCallback;
 
+import static fr.imt.deployzilla.deployzilla.business.utils.Constants.*;
+
 /**
  * Executes pipeline steps in isolated Docker containers.
  * Uses label-based strategy to track and isolate managed containers.
@@ -37,14 +39,7 @@ import com.github.dockerjava.api.command.BuildImageResultCallback;
 @Slf4j
 public class ContainerExecutor {
 
-    private static final String MANAGED_LABEL = "deployzilla.managed";
-    private static final String PIPELINE_LABEL = "deployzilla.pipeline-id";
-    private static final String STEP_LABEL = "deployzilla.step-id";
-    private static final int TUNNEL_PORT = 2375;
-
     private final ProcessLogPublisherPort processLogPublisherPort;
-
-    // --- Configuration: Docker Host (Local vs Remote) ---
 
     @Value("${docker.host:unix:///var/run/docker.sock}")
     private String localDockerHost;
@@ -64,20 +59,16 @@ public class ContainerExecutor {
     @Value("${deployzilla.remote.port:22}")
     private int remotePort;
 
-    // --- Configuration: Private Registry Credentials ---
-
     @Value("${deployzilla.docker.registry.username:}")
     private String registryUsername;
 
     @Value("${deployzilla.docker.registry.password:}")
     private String registryPassword;
 
-    // --- Configuration: Resources ---
-
     @Value("${docker.timeout.seconds:600}")
     private int timeoutSeconds;
 
-    @Value("${docker.memory.limit:2147483648}") // 2GB default
+    @Value("${docker.memory.limit:2147483648}")
     private long memoryLimit;
 
     private DockerClient dockerClient;
@@ -442,20 +433,17 @@ public class ContainerExecutor {
         }
     }
 
-    /**
-     * Start a container and return the container ID (without waiting for completion).
-     */
-    public String startContainer(String pipelineId, String imageName, Map<String, String> envVars) {
-        String containerId = null;
+        /**
+         * Start a container and return the container ID (without waiting for completion).
+         * Binds to Traefik reverse proxy
+         */
+    public String startContainer(
+            String pipelineId,
+            String imageName, Map<String, String> envVars,
+            Map<String, String> labels) {
+        String containerId;
         try {
             publishLog(pipelineId, "Starting application container: " + imageName);
-
-            // Prepare labels for ownership tracking
-            Map<String, String> labels = Map.of(
-                    MANAGED_LABEL, "true",
-                    PIPELINE_LABEL, pipelineId,
-                    "deployzilla.type", "app"
-            );
 
             // Prepare environment variables
             String[] env = envVars != null
@@ -469,7 +457,7 @@ public class ContainerExecutor {
                     .withMemory(memoryLimit)
                     .withMemorySwap(memoryLimit)
                     .withCpuQuota(50000L)
-                    .withPublishAllPorts(true) // Publish all exposed ports
+                    .withPublishAllPorts(true)
                     .withAutoRemove(false);
 
             CreateContainerResponse container = dockerClient.createContainerCmd(imageName)
@@ -494,4 +482,5 @@ public class ContainerExecutor {
     public void publishLog(String pipelineId, String message) {
         processLogPublisherPort.publish(pipelineId, message);
     }
+
 }
