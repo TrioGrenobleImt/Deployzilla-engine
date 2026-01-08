@@ -80,6 +80,13 @@ public class GitCloneService {
 
         // Mount shared workspace volume
         String pipelineWorkspace = workspacePath + "/" + pipelineId;
+        try {
+            Files.createDirectories(Path.of(pipelineWorkspace));
+        } catch (IOException e) {
+             log.error("Failed to create pipeline workspace: {}", pipelineWorkspace, e);
+             return CompletableFuture.completedFuture(new ProcessResult(1, "ERROR"));
+        }
+
         List<String> volumes = List.of(
                 pipelineWorkspace + ":" + CONTAINER_WORKSPACE_PATH
         );
@@ -139,6 +146,13 @@ public class GitCloneService {
 
         // Create temp files in secure location (NOT in shared workspace to prevent exfiltration)
         String pipelineWorkspace = workspacePath + "/" + pipelineId;
+        try {
+            Files.createDirectories(Path.of(pipelineWorkspace));
+        } catch (IOException e) {
+             log.error("Failed to create pipeline workspace: {}", pipelineWorkspace, e);
+             return CompletableFuture.completedFuture(new ProcessResult(1, "ERROR"));
+        }
+
         Path secureKeyDir = Path.of(secureKeysPath, pipelineId);
         Path tempKeyFile = null;
         Path knownHostsFile = null;
