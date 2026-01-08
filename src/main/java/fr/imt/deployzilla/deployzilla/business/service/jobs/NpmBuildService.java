@@ -1,6 +1,7 @@
-package fr.imt.deployzilla.deployzilla.business.service;
+package fr.imt.deployzilla.deployzilla.business.service.jobs;
 
 import fr.imt.deployzilla.deployzilla.business.model.ProcessResult;
+import fr.imt.deployzilla.deployzilla.business.service.ContainerExecutor;
 import fr.imt.deployzilla.deployzilla.business.utils.DirectorySanitizer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -14,9 +15,9 @@ import java.util.concurrent.CompletableFuture;
 @Component
 @RequiredArgsConstructor
 @Slf4j
-public class NpmInstallService {
+public class NpmBuildService {
 
-    private static final String NODE_IMAGE = "deployzilla/step:npm-install";
+    private static final String NODE_IMAGE = "deployzilla/step:npm-build";
     private static final String CONTAINER_WORKSPACE_PATH = "/workspace";
 
     private final ContainerExecutor containerExecutor;
@@ -25,7 +26,7 @@ public class NpmInstallService {
     private String workspacePath;
 
     public CompletableFuture<ProcessResult> execute(String pipelineId, String projectDir) {
-        String stepId = "npm-install";
+        String stepId = "npm-build";
         String sanitizedDir = DirectorySanitizer.sanitizeDirectoryName(projectDir);
 
         String hostProjectPath = workspacePath + "/" + pipelineId + "/" + sanitizedDir;
@@ -33,7 +34,7 @@ public class NpmInstallService {
                 hostProjectPath + ":" + CONTAINER_WORKSPACE_PATH
         );
 
-        log.info("Running NPM Install for pipeline {} in {}", pipelineId, sanitizedDir);
+        log.info("Running NPM Build for pipeline {} in {}", pipelineId, sanitizedDir);
 
         return containerExecutor.executeStep(
                 pipelineId,

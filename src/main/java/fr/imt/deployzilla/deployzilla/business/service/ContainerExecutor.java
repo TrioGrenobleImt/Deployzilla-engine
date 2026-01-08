@@ -18,11 +18,15 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import java.io.File;
 import java.time.Duration;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import com.github.dockerjava.api.command.BuildImageResultCallback;
 
 /**
  * Executes pipeline steps in isolated Docker containers.
@@ -309,7 +313,84 @@ public class ContainerExecutor {
         }
     }
 
-    private void publishLog(String pipelineId, String message) {
+    /**
+     * Build a Docker image from a directory.
+     */
+    public String buildImage(String pipelineId, String buildContextPath, String dockerfileName, String imageName, String tag) {
+        String fullImageName = imageName + ":" + tag;
+        publishLog(pipelineId, "Starting image build: " + fullImageName + " using " + dockerfileName);
+        
+        try {
+            return dockerClient.buildImageCmd(new File(buildContextPath))
+                    .withDockerfile(new File(buildContextPath, dockerfileName))
+                    .withTags(Set.of(fullImageName))
+                    .exec(new BuildImageResultCallback() {
+                        @Override
+                        public void onNext(BuildResponseItem item) {
+                            if (item.getStream() != null) {
+                                publishLog(pipelineId, item.getStream().trim());
+                            }
+                            super.onNext(item);
+                        }
+                    })
+                    .awaitImageId();
+        } catch (Exception e) {
+            log.error("Image build failed", e);
+            publishLog(pipelineId, "Image build failed: " + e.getMessage());
+            throw new RuntimeException("Image build failed", e);
+        }
+    }
+
+    /**
+     * Start a container and return the container ID (without waiting for completion).
+     */
+    public String startContainer(String pipelineId, String imageName, Map<String, String> envVars) {
+        String containerId = null;
+        try {
+            publishLog(pipelineId, "Starting application container: " + imageName);
+
+            // Prepare labels for ownership tracking
+            Map<String, String> labels = Map.of(
+                    MANAGED_LABEL, "true",
+                    PIPELINE_LABEL, pipelineId,
+                    "deployzilla.type", "app"
+            );
+
+            // Prepare environment variables
+            String[] env = envVars != null
+                    ? envVars.entrySet().stream()
+                    .map(e -> e.getKey() + "=" + e.getValue())
+                    .toArray(String[]::new)
+                    : new String[0];
+
+             // Create host config
+            HostConfig hostConfig = HostConfig.newHostConfig()
+                    .withMemory(memoryLimit)
+                    .withMemorySwap(memoryLimit)
+                    .withCpuQuota(50000L)
+                    .withPublishAllPorts(true) // Publish all exposed ports
+                    .withAutoRemove(false);
+
+            CreateContainerResponse container = dockerClient.createContainerCmd(imageName)
+                    .withLabels(labels)
+                    .withEnv(env)
+                    .withHostConfig(hostConfig)
+                    .exec();
+
+            containerId = container.getId();
+            dockerClient.startContainerCmd(containerId).exec();
+
+            publishLog(pipelineId, "Application container started: " + containerId.substring(0, 12));
+            return containerId;
+
+        } catch (Exception e) {
+            log.error("Failed to start application container", e);
+            publishLog(pipelineId, "Failed to start container: " + e.getMessage());
+            throw new RuntimeException("Failed to start container", e);
+        }
+    }
+
+    public void publishLog(String pipelineId, String message) {
         processLogPublisherPort.publish(pipelineId, message);
     }
 }

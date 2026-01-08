@@ -5,7 +5,7 @@ import fr.imt.deployzilla.deployzilla.business.service.JobService;
 import lombok.RequiredArgsConstructor;
 
 @RequiredArgsConstructor
-public class RunNpmInstallCommand implements Command {
+public class RunNpmBuildCommand implements Command {
 
     private final JobService jobService;
 
@@ -13,7 +13,7 @@ public class RunNpmInstallCommand implements Command {
 
     @Override
     public ProcessResult execute() {
-        return jobService.runNpmInstall(pipelineId);
+        return jobService.runNpmBuild(pipelineId);
     }
 
 }

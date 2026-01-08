@@ -3,6 +3,14 @@ package fr.imt.deployzilla.deployzilla.business.service;
 import fr.imt.deployzilla.deployzilla.business.port.ProjectRepositoryPort;
 import fr.imt.deployzilla.deployzilla.exception.ProjectNotFoundException;
 import fr.imt.deployzilla.deployzilla.business.model.ProcessResult;
+import fr.imt.deployzilla.deployzilla.business.service.jobs.NpmInstallService;
+import fr.imt.deployzilla.deployzilla.business.service.jobs.UnitTestService;
+import fr.imt.deployzilla.deployzilla.business.service.jobs.EslintService;
+import fr.imt.deployzilla.deployzilla.business.service.jobs.GitCloneService;
+import fr.imt.deployzilla.deployzilla.business.service.jobs.NpmBuildService;
+import fr.imt.deployzilla.deployzilla.business.service.jobs.ImageBuildService;
+import fr.imt.deployzilla.deployzilla.business.service.jobs.AppRunService;
+import fr.imt.deployzilla.deployzilla.infrastructure.persistence.EnvVar;
 import fr.imt.deployzilla.deployzilla.infrastructure.persistence.Project;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -11,6 +19,8 @@ import org.springframework.stereotype.Service;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -24,6 +34,9 @@ public class JobService {
     private final UnitTestService unitTestService;
     private final NpmInstallService npmInstallService;
     private final SonarqubeService sonarTokenService;
+    private final NpmBuildService npmBuildService;
+    private final ImageBuildService imageBuildService;
+    private final AppRunService appRunService;
 
     @Value("${deployzilla.workspace.path}")
     private String projectDir;
@@ -88,6 +101,52 @@ public class JobService {
             return completableFuture.get();
         } catch (InterruptedException | ExecutionException e) {
             log.error("Error running step {} {}", stepName, e.getMessage());
+            return new ProcessResult(1, "ERROR");
+        }
+    }
+
+    public ProcessResult runNpmBuild(String pipelineId) {
+        log.info("Running NPM build for pipeline: {}", pipelineId);
+        try {
+            return npmBuildService.execute(
+                    pipelineId,
+                    projectDir
+            ).get();
+        } catch (InterruptedException | ExecutionException e) {
+            log.error("Error {}", e.getMessage());
+            return new ProcessResult(1, "ERROR");
+        }
+    }
+
+    public ProcessResult createImage(String projectId, String pipelineId) {
+        log.info("Creating image for pipeline: {}", pipelineId);
+        Project project = projectRepositoryPort.findById(projectId)
+                .orElseThrow(() -> new ProjectNotFoundException(projectId));
+        
+        try {
+            return imageBuildService.execute(
+                    pipelineId,
+                    projectDir,
+                    project.getRepoUrl()
+            ).get();
+        } catch (InterruptedException | ExecutionException e) {
+            log.error("Error {}", e.getMessage());
+            return new ProcessResult(1, "ERROR");
+        }
+    }
+
+    public ProcessResult runApp(String projectId, String pipelineId) {
+        log.info("Running app for pipeline: {}", pipelineId);
+        Project project = projectRepositoryPort.findById(projectId)
+                .orElseThrow(() -> new ProjectNotFoundException(projectId));
+
+        Map<String, String> envVars = project.getEnvVars().stream()
+                .collect(Collectors.toMap(EnvVar::getKey, EnvVar::getValue));
+
+        try {
+            return appRunService.execute(pipelineId, envVars).get();
+        } catch (InterruptedException | ExecutionException e) {
+            log.error("Error {}", e.getMessage());
             return new ProcessResult(1, "ERROR");
         }
     }

@@ -53,3 +53,14 @@ ENTRYPOINT ["/bin/sh", "-c"]
 
 # Run the scanner passing the env vars
 CMD ["sonar-scanner -Dsonar.projectKey=${SONAR_PROJECT_KEY} -Dsonar.sources=. ${SONAR_ARGS}"]
+
+# Stage 6: NPM Build
+FROM node:22-alpine AS npm-build
+
+WORKDIR /workspace
+RUN corepack enable
+
+COPY scripts/run-node-script.sh /run-node-script.sh
+RUN chmod +x /run-node-script.sh
+
+CMD ["/run-node-script.sh", "build"]

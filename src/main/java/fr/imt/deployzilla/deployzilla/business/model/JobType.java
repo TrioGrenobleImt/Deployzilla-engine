@@ -8,7 +8,10 @@ public enum JobType {
     NPM_INSTALL("NPM-INSTALL"),
     NPM_LINT("NPM-LINT"),
     NPM_TEST("NPM-TEST"),
-    SONAR("SONAR");
+    SONAR("SONAR"),
+    NPM_BUILD("NPM-BUILD"),
+    IMAGE_BUILD("IMAGE-BUILD"),
+    APP_RUN("APP-RUN");
 
     private final String commandName;
 

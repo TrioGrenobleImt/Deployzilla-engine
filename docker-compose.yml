@@ -12,6 +12,7 @@ services:
       - DOCKER_HOST=tcp://docker-proxy:2375
       # Use absolute host paths for volumes that spawned containers need to access
       - DEPLOYZILLA_WORKSPACE_PATH=${PWD}/deployzilla-workspaces
+      - DEPLOYZILLA_WORKSPACE_LOCAL_PATH=/workspaces
       - DEPLOYZILLA_KEYS_PATH=${PWD}/deployzilla-keys
     volumes:
       # Bind mount host directories (spawned containers can access these)
@@ -37,11 +38,11 @@ services:
       VOLUMES: 1
       POST: 1
       GET: 1
+      BUILD: 1
       # Deny dangerous operations
       AUTH: 0
       SECRETS: 0
       SWARM: 0
-      BUILD: 0
       COMMIT: 0
       CONFIGS: 0
       DISTRIBUTION: 0
@@ -143,16 +144,25 @@ services:
     entrypoint: ["true"]
     networks:
       - deployzilla
-
-  step-sonarqube-analysis:
-    image: deployzilla/step:sonarqube
+  
+  step-npm-build:
+    image: deployzilla/step:npm-build
     build:
       context: ./src/main/resources/docker
-      target: sonarqube
-    entrypoint: [ "true" ]
+      target: npm-build
+    entrypoint: ["true"]
     networks:
       - deployzilla
       - sonarnet
+
+  # step-sonarqube-analysis:
+  #   image: deployzilla/step:sonarqube
+  #   build:
+  #     context: ./src/main/resources/docker
+  #     target: sonarqube
+  #   entrypoint: [ "true" ]
+  #   networks:
+  #     - deployzilla
 
 networks:
   sonarnet:
