@@ -1,7 +1,8 @@
-package fr.imt.deployzilla.deployzilla.business.service;
+package fr.imt.deployzilla.deployzilla.business.service.jobs;
 
 import fr.imt.deployzilla.deployzilla.business.model.ProcessResult;
 import fr.imt.deployzilla.deployzilla.business.utils.DirectorySanitizer;
+import fr.imt.deployzilla.deployzilla.business.service.ContainerExecutor;
 import fr.imt.deployzilla.deployzilla.infrastructure.persistence.Project;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -49,6 +50,9 @@ public class GitCloneService {
 
     @Value("${deployzilla.workspace.path:/workspaces}")
     private String workspacePath;
+
+    @Value("${deployzilla.workspace.local-path:/workspaces}")
+    private String localWorkspacePath;
 
     @Value("${deployzilla.keys.path:/tmp/deployzilla-keys}")
     private String secureKeysPath;
