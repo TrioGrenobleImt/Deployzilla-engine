@@ -1,7 +1,7 @@
 package fr.imt.deployzilla.deployzilla.business.service;
 
 import com.github.dockerjava.api.DockerClient;
-import com.github.dockerjava.api.async.ResultCallback;
+
 import com.github.dockerjava.api.command.CreateContainerResponse;
 import com.github.dockerjava.api.command.WaitContainerResultCallback;
 import com.github.dockerjava.api.model.*;
@@ -9,9 +9,10 @@ import com.github.dockerjava.core.DefaultDockerClientConfig;
 import com.github.dockerjava.core.DockerClientBuilder;
 import com.github.dockerjava.httpclient5.ApacheDockerHttpClient;
 import fr.imt.deployzilla.deployzilla.business.model.ProcessResult;
-import fr.imt.deployzilla.deployzilla.business.port.ProcessLogPublisherPort;
+
 import fr.imt.deployzilla.deployzilla.exception.ContainerExecutionException;
 import fr.imt.deployzilla.deployzilla.exception.ImagePullException;
+import fr.imt.deployzilla.deployzilla.infrastructure.docker.ContainerLogStreamer;
 import fr.imt.deployzilla.deployzilla.infrastructure.ssh.SshTunnel;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -41,8 +42,9 @@ import static fr.imt.deployzilla.deployzilla.business.utils.Constants.*;
 @Slf4j
 public class ContainerExecutor {
 
-    private final ProcessLogPublisherPort processLogPublisherPort;
+
     private final SshTunnel sshTunnel;
+    private final ContainerLogStreamer containerLogStreamer;
 
     @Value("${docker.host:unix:///var/run/docker.sock}")
     private String localDockerHost;
@@ -164,8 +166,8 @@ public class ContainerExecutor {
         String containerId = null;
 
         try {
-            publishLog(pipelineId, String.format("--- Step [%s] Starting (Local) ---", stepId));
-            publishLog(pipelineId, String.format("Image: %s", image));
+            containerLogStreamer.publishLog(pipelineId, String.format("--- Step [%s] Starting (Local) ---", stepId));
+            containerLogStreamer.publishLog(pipelineId, String.format("Image: %s", image));
 
             // Pull image from registry if not present (LOCALLY)
             pullImageIfNeeded(localDockerClient, pipelineId, image);
@@ -217,27 +219,27 @@ public class ContainerExecutor {
             CreateContainerResponse container = containerCmd.exec();
 
             containerId = container.getId();
-            publishLog(pipelineId, String.format("Container created: %s", containerId.substring(0, 12)));
+            containerLogStreamer.publishLog(pipelineId, String.format("Container created: %s", containerId.substring(0, 12)));
 
             // Start container
             localDockerClient.startContainerCmd(containerId).exec();
 
             // Stream logs
             StringBuilder capturedOutput = new StringBuilder();
-            streamLogs(localDockerClient, pipelineId, containerId, capturedOutput);
+            containerLogStreamer.streamLogs(localDockerClient, pipelineId, containerId, capturedOutput);
 
             // Wait for completion
             Integer exitCode = localDockerClient.waitContainerCmd(containerId)
                     .exec(new WaitContainerResultCallback())
                     .awaitStatusCode(timeoutSeconds, TimeUnit.SECONDS);
 
-            publishLog(pipelineId, String.format("--- Step [%s] Finished (Exit: %d) ---", stepId, exitCode));
+            containerLogStreamer.publishLog(pipelineId, String.format("--- Step [%s] Finished (Exit: %d) ---", stepId, exitCode));
 
             return CompletableFuture.completedFuture(new ProcessResult(exitCode, capturedOutput.toString()));
 
         } catch (Exception e) {
             log.error("Container execution failed for step {}", stepId, e);
-            publishLog(pipelineId, String.format("ERROR: %s", e.getMessage()));
+            containerLogStreamer.publishLog(pipelineId, String.format("ERROR: %s", e.getMessage()));
             return CompletableFuture.completedFuture(new ProcessResult(1, "ERROR"));
 
         } finally {
@@ -274,7 +276,7 @@ public class ContainerExecutor {
                             java.util.Arrays.asList(img.getRepoTags()).contains(imageToCheck));
 
             if (!exists) {
-                publishLog(pipelineId, String.format("Pulling image: %s", imageToCheck));
+                containerLogStreamer.publishLog(pipelineId, String.format("Pulling image: %s", imageToCheck));
                 log.info("Pulling Docker image: {}", imageToCheck);
 
                 var pullCommand = client.pullImageCmd(imageToCheck);
@@ -290,7 +292,7 @@ public class ContainerExecutor {
 
                 pullCommand.start().awaitCompletion(5, TimeUnit.MINUTES);
 
-                publishLog(pipelineId, "Image pulled successfully");
+                containerLogStreamer.publishLog(pipelineId, "Image pulled successfully");
                 log.info("Successfully pulled image: {}", imageToCheck);
             }
         } catch (InterruptedException e) {
@@ -298,41 +300,12 @@ public class ContainerExecutor {
             throw new ImagePullException(imageToCheck, "pull interrupted");
         } catch (Exception e) {
             log.error("Failed to pull image: {}", imageToCheck, e);
-            publishLog(pipelineId, String.format("ERROR: Failed to pull image %s: %s", imageToCheck, e.getMessage()));
+            containerLogStreamer.publishLog(pipelineId, String.format("ERROR: Failed to pull image %s: %s", imageToCheck, e.getMessage()));
             throw new ImagePullException(imageToCheck, e);
         }
     }
 
-    /**
-     * Stream container logs to Redis.
-     */
-    /**
-     * Stream container logs to Redis.
-     */
-    private void streamLogs(DockerClient client, String pipelineId, String containerId, StringBuilder outputBuffer) {
-        try {
-            client.logContainerCmd(containerId)
-                    .withStdOut(true)
-                    .withStdErr(true)
-                    .withFollowStream(true)
-                    .exec(new ResultCallback.Adapter<Frame>() {
-                        @Override
-                        public void onNext(Frame frame) {
-                            String logLine = new String(frame.getPayload()).trim();
-                            if (!logLine.isEmpty()) {
-                                publishLog(pipelineId, logLine);
-                                if (StreamType.STDOUT.equals(frame.getStreamType())) {
-                                    outputBuffer.append(logLine).append("\n");
-                                }
-                            }
-                        }
-                    })
-                    .awaitCompletion(timeoutSeconds, TimeUnit.SECONDS);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            log.warn("Log streaming interrupted for container {}", containerId);
-        }
-    }
+
 
     /**
      * List all containers managed by Deployzilla.
@@ -384,7 +357,7 @@ public class ContainerExecutor {
             Map<String, String> labels) {
         String containerId;
         try {
-            publishLog(pipelineId, "Starting application container: " + imageName);
+            containerLogStreamer.publishLog(pipelineId, "Starting application container: " + imageName);
 
             // Pull image on the remote server (using remote dockerClient)
             pullImageIfNeeded(dockerClient, pipelineId, imageName);
@@ -418,49 +391,22 @@ public class ContainerExecutor {
             
             log.info("Application container started: " + containerId.substring(0, 12));
 
-            publishLog(pipelineId, "Application container started: " + containerId.substring(0, 12));
+            containerLogStreamer.publishLog(pipelineId, "Application container started: " + containerId.substring(0, 12));
             
             // Monitor logs in background
-            monitorContainerLogs(dockerClient, pipelineId, containerId);
+            containerLogStreamer.monitorAsync(dockerClient, pipelineId, containerId);
             
             return containerId;
 
         } catch (Exception e) {
             log.error("Failed to start application container", e);
-            publishLog(pipelineId, "Failed to start container: " + e.getMessage());
+            containerLogStreamer.publishLog(pipelineId, "Failed to start container: " + e.getMessage());
             throw new ContainerExecutionException(imageName, "start", e);
         }
     }
 
-    /**
-     * Monitors container logs in a background thread.
-     * Useful for long-running containers where we want to see startup logs.
-     */
-    private void monitorContainerLogs(DockerClient client, String pipelineId, String containerId) {
-        CompletableFuture.runAsync(() -> {
-            try {
-                client.logContainerCmd(containerId)
-                        .withStdOut(true)
-                        .withStdErr(true)
-                        .withFollowStream(true)
-                        .exec(new ResultCallback.Adapter<Frame>() {
-                            @Override
-                            public void onNext(Frame frame) {
-                                String logLine = new String(frame.getPayload()).trim();
-                                if (!logLine.isEmpty()) {
-                                    publishLog(pipelineId, "[" + containerId.substring(0, 8) + "] " + logLine);
-                                }
-                            }
-                        })
-                        .awaitCompletion(); // Blocks the async thread until container stops or connection closes
-            } catch (Exception e) {
-                log.warn("Stopped monitoring logs for container {}", containerId);
-            }
-        });
-    }
 
-    public void publishLog(String pipelineId, String message) {
-        processLogPublisherPort.publish(pipelineId, message);
-    }
+
+
 
 }

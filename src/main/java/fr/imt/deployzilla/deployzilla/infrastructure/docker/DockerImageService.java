@@ -7,7 +7,7 @@ import com.github.dockerjava.api.model.BuildResponseItem;
 import com.github.dockerjava.core.DefaultDockerClientConfig;
 import com.github.dockerjava.core.DockerClientBuilder;
 import com.github.dockerjava.httpclient5.ApacheDockerHttpClient;
-import fr.imt.deployzilla.deployzilla.business.port.ProcessLogPublisherPort;
+
 import fr.imt.deployzilla.deployzilla.exception.ImageBuildException;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -30,7 +30,7 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 public class DockerImageService {
 
-    private final ProcessLogPublisherPort logPublisher;
+    private final ContainerLogStreamer containerLogStreamer;
 
     @Value("${docker.host:unix:///var/run/docker.sock}")
     private String dockerHost;
@@ -88,7 +88,7 @@ public class DockerImageService {
      */
     public String buildImage(String pipelineId, String buildContextPath, String dockerfileName, String imageName, String tag) {
         String fullImageName = imageName + ":" + tag;
-        publishLog(pipelineId, "Starting LOCAL image build: " + fullImageName);
+        containerLogStreamer.publishLog(pipelineId, "Starting LOCAL image build: " + fullImageName);
 
         try {
             return dockerClient.buildImageCmd(new File(buildContextPath))
@@ -99,7 +99,7 @@ public class DockerImageService {
                         @Override
                         public void onNext(BuildResponseItem item) {
                             if (item.getStream() != null) {
-                                publishLog(pipelineId, item.getStream().trim());
+                                containerLogStreamer.publishLog(pipelineId, item.getStream().trim());
                             }
                             super.onNext(item);
                         }
@@ -107,7 +107,7 @@ public class DockerImageService {
                     .awaitImageId();
         } catch (Exception e) {
             log.error("[DockerImageService] Image build failed", e);
-            publishLog(pipelineId, "Image build failed: " + e.getMessage());
+            containerLogStreamer.publishLog(pipelineId, "Image build failed: " + e.getMessage());
             throw new ImageBuildException(fullImageName, "build", e);
         }
     }
@@ -121,7 +121,7 @@ public class DockerImageService {
      */
     public void pushImage(String pipelineId, String imageName, String tag) {
         String fullImageName = imageName + ":" + tag;
-        publishLog(pipelineId, "Pushing image to registry: " + fullImageName);
+        containerLogStreamer.publishLog(pipelineId, "Pushing image to registry: " + fullImageName);
 
         try {
             var pushCmd = dockerClient.pushImageCmd(fullImageName);
@@ -134,16 +134,14 @@ public class DockerImageService {
             }
 
             pushCmd.start().awaitCompletion(timeoutSeconds, TimeUnit.SECONDS);
-            publishLog(pipelineId, "Image pushed successfully");
+            containerLogStreamer.publishLog(pipelineId, "Image pushed successfully");
 
         } catch (Exception e) {
             log.error("[DockerImageService] Image push failed", e);
-            publishLog(pipelineId, "Image push failed: " + e.getMessage());
+            containerLogStreamer.publishLog(pipelineId, "Image push failed: " + e.getMessage());
             throw new ImageBuildException(fullImageName, "push", e);
         }
     }
 
-    private void publishLog(String pipelineId, String message) {
-        logPublisher.publish(pipelineId, message);
-    }
+
 }

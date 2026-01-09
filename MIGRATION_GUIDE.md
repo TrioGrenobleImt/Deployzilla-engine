@@ -17,7 +17,7 @@ This guide outlines a phased approach to improving the Deployzilla architecture,
 
 ---
 
-### TICKET P1-01: Extract SSH Tunnel to `SshTunnelManager`
+### TICKET P1-01: Extract SSH Tunnel to `SshTunnelManager` ✅
 
 **Priority**: High  
 **Effort**: 2 hours  
@@ -108,7 +108,7 @@ Extract SSH tunnel management logic from `ContainerExecutor` into a dedicated `S
 
 ---
 
-### TICKET P1-02: Extract Image Operations to `DockerImageService`
+### TICKET P1-02: Extract Image Operations to `DockerImageService` ✅
 
 **Priority**: High  
 **Effort**: 2 hours  
@@ -205,7 +205,7 @@ Extract Docker image build and push operations from `ContainerExecutor` into a d
 
 ---
 
-### TICKET P1-03: Remove Hardcoded SonarQube Credentials
+### TICKET P1-03: Remove Hardcoded SonarQube Credentials ✅
 
 **Priority**: Critical (Security)  
 **Effort**: 30 minutes  
@@ -292,7 +292,7 @@ Remove hardcoded SonarQube password from `application.yml` and use environment v
 
 ---
 
-### TICKET P1-04: Introduce Domain Exception Hierarchy
+### TICKET P1-04: Introduce Domain Exception Hierarchy ✅
 
 **Priority**: Medium  
 **Effort**: 1 hour  
@@ -537,7 +537,7 @@ void shouldRetryOnDockerPullFailure() {
 
 ---
 
-### TICKET P1-06: Extract Log Streaming to `ContainerLogStreamer`
+### TICKET P1-06: Extract Log Streaming to `ContainerLogStreamer` ✅
 
 **Priority**: Medium  
 **Effort**: 1 hour  
