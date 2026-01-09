@@ -130,8 +130,6 @@ public class ImageBuildService {
                 %s
                 RUN %s build
                 EXPOSE 3000
-                ENV PORT=3000
-                ENV MONGO_URI=mmongodb://restfull-mongodb:27017/car-lease
                 CMD ["%s", "start"]
                 """.formatted(gitUrl, installCommand, packageManager, packageManager);
     }
