@@ -10,6 +10,7 @@ import com.github.dockerjava.core.DockerClientBuilder;
 import com.github.dockerjava.httpclient5.ApacheDockerHttpClient;
 import fr.imt.deployzilla.deployzilla.business.model.ProcessResult;
 import fr.imt.deployzilla.deployzilla.business.port.ProcessLogPublisherPort;
+import fr.imt.deployzilla.deployzilla.infrastructure.ssh.SshTunnel;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
@@ -18,7 +19,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
-import java.io.IOException;
 import java.io.File;
 import java.time.Duration;
 import java.util.List;
@@ -40,24 +40,13 @@ import static fr.imt.deployzilla.deployzilla.business.utils.Constants.*;
 public class ContainerExecutor {
 
     private final ProcessLogPublisherPort processLogPublisherPort;
+    private final SshTunnel sshTunnel;
 
     @Value("${docker.host:unix:///var/run/docker.sock}")
     private String localDockerHost;
 
     @Value("${deployzilla.remote.enabled:false}")
     private boolean remoteEnabled;
-
-    @Value("${deployzilla.remote.host:localhost}")
-    private String remoteHost;
-
-    @Value("${deployzilla.remote.user:root}")
-    private String remoteUser;
-
-    @Value("${deployzilla.remote.password:}")
-    private String remotePassword; // Inject Password
-
-    @Value("${deployzilla.remote.port:22}")
-    private int remotePort;
 
     @Value("${deployzilla.docker.registry.username:}")
     private String registryUsername;
@@ -73,7 +62,6 @@ public class ContainerExecutor {
 
     private DockerClient dockerClient; // Remote (or local if remote invalid/disabled)
     private DockerClient localDockerClient; // Always Local
-    private Process sshTunnelProcess;
 
     @PostConstruct
     public void init() {
@@ -98,14 +86,9 @@ public class ContainerExecutor {
         String finalRemoteDockerHost = localDockerHost;
 
         if (remoteEnabled) {
-            log.info("Starting SSH Tunnel to {}:{}", remoteHost, remotePort);
-            try {
-                startSshTunnel();
-                // Point Docker Client to the Local Tunnel
-                finalRemoteDockerHost = "tcp://127.0.0.1:" + TUNNEL_PORT;
-            } catch (Exception e) {
-                throw new RuntimeException("Failed to establish SSH tunnel", e);
-            }
+            sshTunnel.connect();
+            // Point Docker Client to the Local Tunnel
+            finalRemoteDockerHost = "tcp://127.0.0.1:" + sshTunnel.getLocalPort();
         }
 
         DefaultDockerClientConfig remoteConfig = DefaultDockerClientConfig.createDefaultConfigBuilder()
@@ -124,63 +107,13 @@ public class ContainerExecutor {
                 .build();
 
         log.info("Remote Docker client initialized connected to: {}", finalRemoteDockerHost);
-        log.info("Remote Config - Enabled: {}, Host: {}, Port: {}, User: {}", remoteEnabled, remoteHost, remotePort, remoteUser);
-    }
-
-    private void startSshTunnel() throws IOException, InterruptedException {
-        log.info("Starting SSH Tunnel with Password Auth...");
-
-        ProcessBuilder pb = new ProcessBuilder(
-                "sshpass", "-e",
-                "ssh",
-                "-4",
-                "-N", // No remote command (just forwarding)
-                "-L", String.format("%d:/var/run/docker.sock", TUNNEL_PORT),
-                "-p", String.valueOf(remotePort),
-                "-o", "StrictHostKeyChecking=no",     // Don't ask for confirmation
-                "-o", "UserKnownHostsFile=/dev/null", // Don't save host keys
-                "-o", "LogLevel=VERBOSE",             // <--- Enable Verbose Logs
-                String.format("%s@%s", remoteUser, remoteHost)
-        );
-
-        if (remotePassword != null && !remotePassword.isBlank()) {
-            pb.environment().put("SSHPASS", remotePassword);
-        } else {
-            throw new RuntimeException("Remote Password is required!");
-        }
-
-        // Redirect stderr to stdout so we can read both in one stream
-        pb.redirectErrorStream(true);
-
-        this.sshTunnelProcess = pb.start();
-
-        // --- NEW: Read SSH Output in a background thread ---
-        new Thread(() -> {
-            try (java.io.BufferedReader reader = new java.io.BufferedReader(
-                    new java.io.InputStreamReader(sshTunnelProcess.getInputStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    // Log every line from SSH so you can see auth errors
-                    log.warn("[SSH-TUNNEL] {}", line);
-                }
-            } catch (IOException e) {
-                // Ignore stream close errors
-            }
-        }).start();
-        // --------------------------------------------------
-
-        // Wait a bit longer to ensure connection is stable
-        Thread.sleep(3000);
-
-        if (!sshTunnelProcess.isAlive()) {
-            throw new RuntimeException("SSH Tunnel process died immediately. Check logs above for [SSH-TUNNEL] errors.");
-        }
-
-        log.info("SSH Tunnel started successfully on port {}", TUNNEL_PORT);
     }
 
     @PreDestroy
     public void cleanup() {
+        // Disconnect SSH tunnel first
+        sshTunnel.disconnect();
+        
         if (dockerClient != null) {
             try {
                 dockerClient.close();
