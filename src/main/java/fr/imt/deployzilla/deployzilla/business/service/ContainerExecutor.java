@@ -526,12 +526,15 @@ public class ContainerExecutor {
                     .toArray(String[]::new)
                     : new String[0];
 
+            log.info("Starting container with environment variables: {}", envVars);
+
              // Create host config
             HostConfig hostConfig = HostConfig.newHostConfig()
                     .withMemory(memoryLimit)
                     .withMemorySwap(memoryLimit)
                     .withCpuQuota(50000L)
                     .withPublishAllPorts(true)
+                    .withExtraHosts("host.docker.internal:host-gateway")
                     .withAutoRemove(false);
 
             CreateContainerResponse container = dockerClient.createContainerCmd(imageName)
