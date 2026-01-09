@@ -4,6 +4,8 @@ import fr.imt.deployzilla.deployzilla.exception.SshConnectionException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -37,6 +39,11 @@ public class SshpassTunnelManager implements SshTunnel {
     private Process sshTunnelProcess;
 
     @Override
+    @Retryable(
+        retryFor = {SshConnectionException.class},
+        maxAttempts = 3,
+        backoff = @Backoff(delay = 5000, multiplier = 2)
+    )
     public void connect() throws SshConnectionException {
         if (!enabled) {
             log.info("[SSH-TUNNEL] Remote mode disabled, skipping tunnel setup");
