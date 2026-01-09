@@ -8,6 +8,7 @@ import com.github.dockerjava.core.DefaultDockerClientConfig;
 import com.github.dockerjava.core.DockerClientBuilder;
 import com.github.dockerjava.httpclient5.ApacheDockerHttpClient;
 import fr.imt.deployzilla.deployzilla.business.port.ProcessLogPublisherPort;
+import fr.imt.deployzilla.deployzilla.exception.ImageBuildException;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
@@ -107,7 +108,7 @@ public class DockerImageService {
         } catch (Exception e) {
             log.error("[DockerImageService] Image build failed", e);
             publishLog(pipelineId, "Image build failed: " + e.getMessage());
-            throw new RuntimeException("Image build failed", e);
+            throw new ImageBuildException(fullImageName, "build", e);
         }
     }
 
@@ -138,7 +139,7 @@ public class DockerImageService {
         } catch (Exception e) {
             log.error("[DockerImageService] Image push failed", e);
             publishLog(pipelineId, "Image push failed: " + e.getMessage());
-            throw new RuntimeException("Image push failed", e);
+            throw new ImageBuildException(fullImageName, "push", e);
         }
     }
 

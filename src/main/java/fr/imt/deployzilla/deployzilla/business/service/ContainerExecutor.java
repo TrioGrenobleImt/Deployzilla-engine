@@ -10,6 +10,8 @@ import com.github.dockerjava.core.DockerClientBuilder;
 import com.github.dockerjava.httpclient5.ApacheDockerHttpClient;
 import fr.imt.deployzilla.deployzilla.business.model.ProcessResult;
 import fr.imt.deployzilla.deployzilla.business.port.ProcessLogPublisherPort;
+import fr.imt.deployzilla.deployzilla.exception.ContainerExecutionException;
+import fr.imt.deployzilla.deployzilla.exception.ImagePullException;
 import fr.imt.deployzilla.deployzilla.infrastructure.ssh.SshTunnel;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -293,11 +295,11 @@ public class ContainerExecutor {
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new RuntimeException("Image pull interrupted", e);
+            throw new ImagePullException(imageToCheck, "pull interrupted");
         } catch (Exception e) {
             log.error("Failed to pull image: {}", imageToCheck, e);
             publishLog(pipelineId, String.format("ERROR: Failed to pull image %s: %s", imageToCheck, e.getMessage()));
-            throw new RuntimeException("Failed to pull image: " + imageToCheck, e);
+            throw new ImagePullException(imageToCheck, e);
         }
     }
 
@@ -426,7 +428,7 @@ public class ContainerExecutor {
         } catch (Exception e) {
             log.error("Failed to start application container", e);
             publishLog(pipelineId, "Failed to start container: " + e.getMessage());
-            throw new RuntimeException("Failed to start container", e);
+            throw new ContainerExecutionException(imageName, "start", e);
         }
     }
 

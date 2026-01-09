@@ -1,5 +1,7 @@
 package fr.imt.deployzilla.deployzilla.infrastructure.ssh;
 
+import fr.imt.deployzilla.deployzilla.exception.SshConnectionException;
+
 /**
  * Interface defining SSH tunnel operations.
  * Provides abstraction layer for SSH tunnel management,
@@ -10,9 +12,9 @@ public interface SshTunnel {
     /**
      * Establishes the SSH tunnel connection.
      *
-     * @throws SshException if the tunnel cannot be established
+     * @throws SshConnectionException if the tunnel cannot be established
      */
-    void connect() throws SshException;
+    void connect() throws SshConnectionException;
 
     /**
      * Closes the SSH tunnel connection gracefully.
@@ -33,3 +35,4 @@ public interface SshTunnel {
      */
     int getLocalPort();
 }
+

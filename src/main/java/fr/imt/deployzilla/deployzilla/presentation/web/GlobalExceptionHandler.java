@@ -1,6 +1,6 @@
 package fr.imt.deployzilla.deployzilla.presentation.web;
 
-import fr.imt.deployzilla.deployzilla.exception.ProjectNotFoundException;
+import fr.imt.deployzilla.deployzilla.exception.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -22,14 +22,81 @@ import java.util.stream.Collectors;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    // ===== Domain Exception Handlers =====
+
     @ExceptionHandler(ProjectNotFoundException.class)
     public ResponseEntity<HttpResponse<Void>> handleResourceNotFound(ProjectNotFoundException ex) {
         HttpResponse<Void> errorResponse = HttpResponse.error(
-                "Resource Not Found",
+                ex.getErrorCode(),
                 ex.getMessage()
         );
         return new ResponseEntity<>(errorResponse, HttpStatus.NOT_FOUND);
     }
+
+    @ExceptionHandler(DockerOperationException.class)
+    public ResponseEntity<HttpResponse<Void>> handleDockerOperationError(DockerOperationException ex) {
+        log.error("Docker operation failed: {}", ex.getMessage(), ex);
+        HttpResponse<Void> errorResponse = HttpResponse.error(
+                ex.getErrorCode(),
+                ex.getMessage()
+        );
+        return new ResponseEntity<>(errorResponse, HttpStatus.SERVICE_UNAVAILABLE);
+    }
+
+    @ExceptionHandler(ImageBuildException.class)
+    public ResponseEntity<HttpResponse<Void>> handleImageBuildError(ImageBuildException ex) {
+        log.error("Image build/push failed: {}", ex.getMessage(), ex);
+        HttpResponse<Void> errorResponse = HttpResponse.error(
+                ex.getErrorCode(),
+                ex.getMessage()
+        );
+        return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    @ExceptionHandler(ImagePullException.class)
+    public ResponseEntity<HttpResponse<Void>> handleImagePullError(ImagePullException ex) {
+        log.error("Image pull failed: {}", ex.getMessage(), ex);
+        HttpResponse<Void> errorResponse = HttpResponse.error(
+                ex.getErrorCode(),
+                ex.getMessage()
+        );
+        return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    @ExceptionHandler(ContainerExecutionException.class)
+    public ResponseEntity<HttpResponse<Void>> handleContainerExecutionError(ContainerExecutionException ex) {
+        log.error("Container execution failed: {}", ex.getMessage(), ex);
+        HttpResponse<Void> errorResponse = HttpResponse.error(
+                ex.getErrorCode(),
+                ex.getMessage()
+        );
+        return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    @ExceptionHandler(SshConnectionException.class)
+    public ResponseEntity<HttpResponse<Void>> handleSshConnectionError(SshConnectionException ex) {
+        log.error("SSH connection failed: {}", ex.getMessage(), ex);
+        HttpResponse<Void> errorResponse = HttpResponse.error(
+                ex.getErrorCode(),
+                ex.getMessage()
+        );
+        return new ResponseEntity<>(errorResponse, HttpStatus.SERVICE_UNAVAILABLE);
+    }
+
+    /**
+     * Fallback handler for any DeployzillaException not handled above.
+     */
+    @ExceptionHandler(DeployzillaException.class)
+    public ResponseEntity<HttpResponse<Void>> handleDeployzillaException(DeployzillaException ex) {
+        log.error("Deployzilla exception: {}", ex.getMessage(), ex);
+        HttpResponse<Void> errorResponse = HttpResponse.error(
+                ex.getErrorCode(),
+                ex.getMessage()
+        );
+        return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    // ===== Framework Exception Handlers =====
 
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<HttpResponse<Void>> handleNoResourceFoundException(NoResourceFoundException ex) {

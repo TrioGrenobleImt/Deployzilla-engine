@@ -1,5 +1,6 @@
 package fr.imt.deployzilla.deployzilla.infrastructure.ssh;
 
+import fr.imt.deployzilla.deployzilla.exception.SshConnectionException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -36,7 +37,7 @@ public class SshpassTunnelManager implements SshTunnel {
     private Process sshTunnelProcess;
 
     @Override
-    public void connect() throws SshException {
+    public void connect() throws SshConnectionException {
         if (!enabled) {
             log.info("[SSH-TUNNEL] Remote mode disabled, skipping tunnel setup");
             return;
@@ -45,7 +46,7 @@ public class SshpassTunnelManager implements SshTunnel {
         log.info("[SSH-TUNNEL] Starting SSH Tunnel with Password Auth to {}:{}", host, port);
 
         if (password == null || password.isBlank()) {
-            throw new SshException("Remote password is required for SSH tunnel");
+            throw new SshConnectionException("Remote password is required for SSH tunnel");
         }
 
         try {
@@ -74,16 +75,16 @@ public class SshpassTunnelManager implements SshTunnel {
             Thread.sleep(3000);
 
             if (!isConnected()) {
-                throw new SshException("SSH Tunnel process died immediately. Check logs for [SSH-TUNNEL] errors.");
+                throw new SshConnectionException("SSH Tunnel process died immediately. Check logs for [SSH-TUNNEL] errors.");
             }
 
             log.info("[SSH-TUNNEL] SSH Tunnel started successfully on port {}", TUNNEL_PORT);
 
         } catch (IOException e) {
-            throw new SshException("Failed to start SSH tunnel process", e);
+            throw new SshConnectionException("Failed to start SSH tunnel process", e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new SshException("SSH tunnel connection was interrupted", e);
+            throw new SshConnectionException("SSH tunnel connection was interrupted", e);
         }
     }
 
