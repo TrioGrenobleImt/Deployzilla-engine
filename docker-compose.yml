@@ -4,21 +4,28 @@ services:
     ports:
       - '8081:8081'
     environment:
+      # Spring Data Configuration
       - SPRING_DATA_REDIS_HOST=redis
       - SPRING_DATA_REDIS_PORT=6379
-      - SPRING_DATA_REDIS_PASSWORD=admin
-      - SPRING_DATA_MONGODB_URI=mongodb://mongo:27017/deployzilla
-      - SPRING_MONGODB_URI=mongodb://mongo:27017/deployzilla
+      - SPRING_DATA_REDIS_PASSWORD=${REDIS_PASSWORD:-admin}
+      - SPRING_DATA_MONGODB_URI=${MONGODB_URI:-mongodb://mongo:27017/deployzilla}
+      - SPRING_MONGODB_URI=${MONGODB_URI:-mongodb://mongo:27017/deployzilla}
       - DOCKER_HOST=tcp://docker-proxy:2375
-      # Use absolute host paths for volumes that spawned containers need to access
+      # Workspace paths (use absolute host paths for spawned containers)
       - DEPLOYZILLA_WORKSPACE_PATH=${PWD}/deployzilla-workspaces
       - DEPLOYZILLA_WORKSPACE_LOCAL_PATH=/workspaces
       - DEPLOYZILLA_KEYS_PATH=${PWD}/deployzilla-keys
-      - DEPLOYZILLA_REMOTE_PORT=2233
-      - DEPLOYZILLA_REMOTE_USER=deployzilla
-      - DEPLOYZILLA_REMOTE_PASSWORD=<REMOTE_PASSWORD>
-      - DOCKER_REGISTRY_USER=piryth
-      - DOCKER_REGISTRY_PASSWORD=<DOCKER_REGISTRY_PASSWORD>
+      # Remote VPS Deployment (SSH)
+      - DEPLOYZILLA_REMOTE_PORT=${DEPLOYZILLA_REMOTE_PORT:-22}
+      - DEPLOYZILLA_REMOTE_USER=${DEPLOYZILLA_REMOTE_USER}
+      - DEPLOYZILLA_REMOTE_PASSWORD=${DEPLOYZILLA_REMOTE_PASSWORD}
+      # Docker Registry
+      - DOCKER_REGISTRY_USER=${DOCKER_REGISTRY_USER}
+      - DOCKER_REGISTRY_PASSWORD=${DOCKER_REGISTRY_PASSWORD}
+      # SonarQube Configuration
+      - SONAR_USERNAME=${SONAR_USERNAME:-admin}
+      - SONAR_PASSWORD=${SONAR_PASSWORD}
+      - SONAR_URL=${SONAR_URL:-http://sonarqube:9000}
     volumes:
       # Bind mount host directories (spawned containers can access these)
       - ./deployzilla-workspaces:/workspaces
@@ -64,7 +71,7 @@ services:
 
   redis:
     image: redis:alpine
-    command: redis-server --requirepass admin
+    command: redis-server --requirepass ${REDIS_PASSWORD:-admin}
     ports:
       - '6379:6379'
 
@@ -92,8 +99,8 @@ services:
       - sonarnet
     environment:
       - SONAR_JDBC_URL=jdbc:postgresql://sonar_db:5432/sonar
-      - SONAR_JDBC_USERNAME=sonar
-      - SONAR_JDBC_PASSWORD=sonar
+      - SONAR_JDBC_USERNAME=${SONAR_DB_USER:-sonar}
+      - SONAR_JDBC_PASSWORD=${SONAR_DB_PASSWORD:-sonar}
     volumes:
       - sonar_data:/opt/sonarqube/data
       - sonar_extensions:/opt/sonarqube/extensions
@@ -107,8 +114,8 @@ services:
     networks:
       - sonarnet
     environment:
-      - POSTGRES_USER=sonar
-      - POSTGRES_PASSWORD=sonar
+      - POSTGRES_USER=${SONAR_DB_USER:-sonar}
+      - POSTGRES_PASSWORD=${SONAR_DB_PASSWORD:-sonar}
       - POSTGRES_DB=sonar
     volumes:
       - sonar_db_data:/var/lib/postgresql/data

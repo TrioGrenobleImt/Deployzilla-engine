@@ -15,9 +15,9 @@ server:
 
 sonar:
   web:
-    username: admin
-    password: "SyQ7WTN2fh5ju45k8Fz!"
-  url: http://sonarqube:9000
+    username: ${SONAR_USERNAME:admin}
+    password: ${SONAR_PASSWORD}
+  url: ${SONAR_URL:http://sonarqube:9000}
 
 deployzilla:
   workspace:
