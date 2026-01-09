@@ -23,8 +23,8 @@ deployzilla:
   workspace:
     path: /tmp/deployzilla
   remote:
-    enabled: false              # Set to false to run locally
-    host: "147.79.114.156"       # IP of the remote worker machine
+    enabled: true              # Set to false to run locally
+    host: ${DEPLOYZILLA_REMOTE_HOST:localhost}       # IP of the remote worker machine
     user: ${DEPLOYZILLA_REMOTE_USER:root}               # User on the remote machine (must have docker access)
     password: ${DEPLOYZILLA_REMOTE_PASSWORD:}
     port: ${DEPLOYZILLA_REMOTE_PORT:22}
@@ -32,6 +32,6 @@ deployzilla:
   # 2. Private Registry Credentials (for Pulling)
   docker:
     registry:
-      username: "${DOCKER_REGISTRY_USER:}"      # Inject via Env Var
-      password: "${DOCKER_REGISTRY_PASSWORD:}"  # Inject via Env Var
-      url: "https://index.docker.io/v1/"       # Default for Docker Hub
+      username: ${DOCKER_REGISTRY_USER:}      # Inject via Env Var
+      password: ${DOCKER_REGISTRY_PASSWORD:}  # Inject via Env Var
+      url: "https://index.docker.io/v1/"      # Default for Docker Hub

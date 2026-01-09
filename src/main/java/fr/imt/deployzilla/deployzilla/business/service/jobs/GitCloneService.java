@@ -29,7 +29,7 @@ import java.util.concurrent.CompletableFuture;
 public class GitCloneService {
 
     // Custom image name - implies it must be built tagged as such
-    private static final String GIT_IMAGE = "piryth/deployzilla-step-git-clone:latest";
+    private static final String GIT_IMAGE = "deployzilla/step:git-clone";
 
     // Container mount paths
     private static final String CONTAINER_WORKSPACE_PATH = "/workspace";

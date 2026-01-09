@@ -66,6 +66,9 @@ public class ContainerExecutor {
     @Value("${deployzilla.docker.registry.password:}")
     private String registryPassword;
 
+    @Value("${deployzilla.docker.registry.url:}")
+    private String registryUrl;
+
     @Value("${docker.timeout.seconds:600}")
     private int timeoutSeconds;
 
@@ -211,10 +214,7 @@ public class ContainerExecutor {
                     .withMemorySwap(memoryLimit) // Disable swap
                     .withCpuQuota(50000L)        // 50% CPU limit
                     .withCpuPeriod(100000L)
-                    .withNetworkMode("bridge") // Use bridge for local instead of deployzilla? Or assume Deployzilla network exists locally too.
-                    // Assuming host has the network, or fallback to bridge for generic steps. 
-                    // Let's keep deployzilla if user set it up, but usually bridge is safer for generic steps unless Inter-Container comm fits.
-                    // Safest for Git Clone is default.
+                    .withNetworkMode("deployzilla")
                     .withBinds(binds)
                     .withAutoRemove(false);
 
@@ -297,17 +297,40 @@ public class ContainerExecutor {
                 log.info("Pulling Docker image: {}", imageToCheck);
 
                 var pullCommand = client.pullImageCmd(imageToCheck);
+                boolean applyAuth = shouldApplyAuth(imageToCheck);
 
-                // Inject Registry Credentials
-                if (registryUsername != null && !registryUsername.isBlank()) {
+                if (applyAuth) {
                     log.info("Pulling Docker image with registry credentials: {}", imageToCheck);
                     AuthConfig authConfig = new AuthConfig()
-                            .withUsername(registryUsername)
-                            .withPassword(registryPassword);
+                        .withUsername(registryUsername)
+                        .withPassword(registryPassword)
+                        .withRegistryAddress(registryUrl);
                     pullCommand.withAuthConfig(authConfig);
+                    pullCommand.start().awaitCompletion(5, TimeUnit.MINUTES);
+                } else {
+                     // Try pulling anonymously first (expected for public images)
+                     log.info("Pulling Docker image without registry credentials (public/external image): {}", imageToCheck);
+                     try {
+                         tryPullAnonymous(client, imageToCheck);
+                     } catch (DockerException e) {
+                         // If failed, and we have credentials, maybe it's a private image on Hub (implicit)?
+                         if (registryUsername != null && !registryUsername.isBlank()) {
+                             log.warn("Anonymous pull failed for {}, retrying with configured credentials.", imageToCheck);
+                             containerLogStreamer.publishLog(pipelineId, "Anonymous pull failed, retrying with credentials...");
+                             
+                             // Re-create command for retry
+                             var retryPullCommand = client.pullImageCmd(imageToCheck);
+                             AuthConfig authConfig = new AuthConfig()
+                                 .withUsername(registryUsername)
+                                 .withPassword(registryPassword)
+                                 .withRegistryAddress(registryUrl);
+                             retryPullCommand.withAuthConfig(authConfig);
+                             retryPullCommand.start().awaitCompletion(5, TimeUnit.MINUTES);
+                         } else {
+                             throw e; // No credentials to retry with
+                         }
+                     }
                 }
-
-                pullCommand.start().awaitCompletion(5, TimeUnit.MINUTES);
 
                 containerLogStreamer.publishLog(pipelineId, "Image pulled successfully");
                 log.info("Successfully pulled image: {}", imageToCheck);
@@ -320,6 +343,12 @@ public class ContainerExecutor {
             containerLogStreamer.publishLog(pipelineId, String.format("ERROR: Failed to pull image %s: %s", imageToCheck, e.getMessage()));
             throw new ImagePullException(imageToCheck, e);
         }
+    }
+
+    private void tryPullAnonymous(DockerClient client, String image) throws InterruptedException {
+        client.pullImageCmd(image)
+                .start()
+                .awaitCompletion(5, TimeUnit.MINUTES);
     }
 
     @Recover
@@ -431,8 +460,32 @@ public class ContainerExecutor {
         }
     }
 
+    private boolean shouldApplyAuth(String image) {
+        if (registryUsername == null || registryUsername.isBlank()) {
+            return false;
+        }
+        if (registryUrl == null || registryUrl.isBlank()) {
+            // Unclear config, fallback to anonymous first then retry
+            return false; 
+        }
 
+        // Clean registry URL to get host
+        String registryHost = registryUrl
+                .replace("https://", "")
+                .replace("http://", "");
+        
+        if (registryHost.contains("/")) {
+            registryHost = registryHost.substring(0, registryHost.indexOf("/"));
+        }
 
+        // 1. If image explicitly starts with registry host, definitely apply.
+        if (image.startsWith(registryHost)) {
+            return true;
+        }
 
+        // 2. Strict check: If it doesn't match, DON'T apply auth initially.
+        // We rely on the fallback retry logic for implicit Docker Hub images.
+        return false;
+    }
 
 }

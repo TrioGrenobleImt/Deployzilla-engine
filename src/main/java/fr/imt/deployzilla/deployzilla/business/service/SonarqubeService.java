@@ -87,7 +87,7 @@ public class SonarqubeService {
                 Map.of("SONAR_TOKEN", token,
                         "SONAR_PROJECT_KEY", projectId,
                         "SONAR_HOST_URL", sonarUrl,
-                        "SONAE_ARGS", "-Dsonar.javascript.lcov.reportPaths=coverage/lcov.info"
+                        "SONAR_ARGS", "-Dsonar.javascript.lcov.reportPaths=coverage/lcov.info"
                 )
         );
     }

@@ -44,6 +44,9 @@ public class DockerImageService {
     @Value("${deployzilla.docker.registry.password:}")
     private String registryPassword;
 
+    @Value("${deployzilla.docker.registry.url:}")
+    private String registryUrl;
+
     @Value("${docker.timeout.seconds:600}")
     private int timeoutSeconds;
 
@@ -99,11 +102,12 @@ public class DockerImageService {
         containerLogStreamer.publishLog(pipelineId, "Starting LOCAL image build: " + fullImageName);
 
         try {
-            return dockerClient.buildImageCmd(new File(buildContextPath))
+            var buildCmd = dockerClient.buildImageCmd(new File(buildContextPath))
                     .withDockerfile(new File(buildContextPath, dockerfileName))
                     .withTags(Set.of(fullImageName))
-                    .withPlatform("linux/amd64")
-                    .exec(new BuildImageResultCallback() {
+                    .withPlatform("linux/amd64");
+
+            return buildCmd.exec(new BuildImageResultCallback() {
                         @Override
                         public void onNext(BuildResponseItem item) {
                             if (item.getStream() != null) {
@@ -142,7 +146,8 @@ public class DockerImageService {
             if (registryUsername != null && !registryUsername.isBlank()) {
                 AuthConfig authConfig = new AuthConfig()
                         .withUsername(registryUsername)
-                        .withPassword(registryPassword);
+                        .withPassword(registryPassword)
+                        .withRegistryAddress(registryUrl);
                 pushCmd.withAuthConfig(authConfig);
             }
 

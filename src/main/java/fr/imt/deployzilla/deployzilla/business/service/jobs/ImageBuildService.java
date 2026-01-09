@@ -22,6 +22,8 @@ public class ImageBuildService {
     private final DockerImageService dockerImageService;
     private final ProcessLogPublisherPort logPublisher;
 
+    private final String DOCKER_FILENAME = "Dockerfile";
+
     @Value("${deployzilla.workspace.path:/workspaces}")
     private String workspacePath;
 
@@ -33,13 +35,11 @@ public class ImageBuildService {
 
     public CompletableFuture<ProcessResult> execute(String pipelineId, String projectDir, String gitUrl) {
         String sanitizedDir = DirectorySanitizer.sanitizeDirectoryName(projectDir);
-        String hostProjectPath = workspacePath + "/" + pipelineId + "/" + sanitizedDir;
         String localProjectPath = workspaceLocalPath + "/" + pipelineId + "/" + sanitizedDir;
         
         // We use pipelineId as the image name (or part of it)
         String imageName = "deployzilla-app-" + pipelineId;
         String tag = "latest";
-        String dockerfileName = "Dockerfile";
 
         log.info("Building image {} for pipeline {}", imageName, pipelineId);
 
@@ -70,7 +70,7 @@ public class ImageBuildService {
             String registryPrefix = (registryUsername != null && !registryUsername.isBlank()) ? registryUsername + "/" : "";
             String finalImageName = registryPrefix + imageName;
             
-            dockerImageService.buildImage(pipelineId, buildContextPath.toString(), "Dockerfile", finalImageName, tag);
+            dockerImageService.buildImage(pipelineId, buildContextPath.toString(), DOCKER_FILENAME, finalImageName, tag);
             
             // 6. Push Image to Registry
              if (registryUsername != null && !registryUsername.isBlank()) {
