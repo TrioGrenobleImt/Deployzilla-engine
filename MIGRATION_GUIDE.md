@@ -413,7 +413,7 @@ Replace generic `RuntimeException` throws with a structured domain exception hie
 
 ---
 
-### TICKET P1-05: Add Retry Mechanism with Spring Retry
+### TICKET P1-05: Add Retry Mechanism with Spring Retry ✅
 
 **Priority**: High  
 **Effort**: 2 hours  
@@ -510,12 +510,12 @@ Add automatic retry capability for transient failures in Docker operations and e
 
 #### Acceptance Criteria
 
-- [ ] spring-retry dependency added to `pom.xml`
-- [ ] `@EnableRetry` added to main application class
-- [ ] At least 4 methods annotated with `@Retryable`
-- [ ] `@Recover` methods log failures and throw appropriate exceptions
-- [ ] Retry attempts are logged with attempt count
-- [ ] Configurable max attempts via `application.yml`
+- [x] spring-retry dependency added to `pom.xml`
+- [x] `@EnableRetry` added to main application class
+- [x] At least 4 methods annotated with `@Retryable`
+- [x] `@Recover` methods log failures and throw appropriate exceptions
+- [x] Retry attempts are logged with attempt count
+- [x] Configurable max attempts via `application.yml`
 
 #### Testing
 
