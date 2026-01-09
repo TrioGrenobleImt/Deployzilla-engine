@@ -1,8 +1,9 @@
 package fr.imt.deployzilla.deployzilla.business.service.jobs;
 
 import fr.imt.deployzilla.deployzilla.business.model.ProcessResult;
-import fr.imt.deployzilla.deployzilla.business.service.ContainerExecutor;
+import fr.imt.deployzilla.deployzilla.business.port.ProcessLogPublisherPort;
 import fr.imt.deployzilla.deployzilla.business.utils.DirectorySanitizer;
+import fr.imt.deployzilla.deployzilla.infrastructure.docker.DockerImageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -18,7 +19,8 @@ import java.util.concurrent.CompletableFuture;
 @Slf4j
 public class ImageBuildService {
 
-    private final ContainerExecutor containerExecutor;
+    private final DockerImageService dockerImageService;
+    private final ProcessLogPublisherPort logPublisher;
 
     @Value("${deployzilla.workspace.path:/workspaces}")
     private String workspacePath;
@@ -42,7 +44,6 @@ public class ImageBuildService {
         log.info("Building image {} for pipeline {}", imageName, pipelineId);
 
         try {
-            // 1. Detect Package Manager
             // 1. Detect Package Manager (still check local files for decision)
             Path projectPath = Path.of(localProjectPath);
             String runCommand = detectRunCommand(projectPath);
@@ -52,34 +53,32 @@ public class ImageBuildService {
             // This ensures a clean context without symlinks (node_modules)
             Path buildContextPath = Files.createTempDirectory("deployzilla-build-" + pipelineId);
             log.info("Created temporary build context at {}", buildContextPath);
-            containerExecutor.publishLog(pipelineId, "Created clean build context at " + buildContextPath);
+            logPublisher.publish(pipelineId, "Created clean build context at " + buildContextPath);
 
             // 3. Generate Dockerfile Content
             String dockerfileContent = generateDockerfileContent(gitUrl, runCommand);
             log.info("Generated Dockerfile content: {}", dockerfileContent);
-            containerExecutor.publishLog(pipelineId, "Generated Dockerfile content:\n" + dockerfileContent);
+            logPublisher.publish(pipelineId, "Generated Dockerfile content:\n" + dockerfileContent);
 
             // 4. Write Dockerfile to the temporary context
             Path dockerfilePath = buildContextPath.resolve("Dockerfile");
             log.info("Writing Dockerfile to {}", dockerfilePath);
-            containerExecutor.publishLog(pipelineId, "Writing Dockerfile to " + dockerfilePath);
+            logPublisher.publish(pipelineId, "Writing Dockerfile to " + dockerfilePath);
             Files.writeString(dockerfilePath, dockerfileContent);
             
             // 5. Build Image LOCALLY
             String registryPrefix = (registryUsername != null && !registryUsername.isBlank()) ? registryUsername + "/" : "";
-            // If registry is used, prepend it. If not, standard naming for local run might fail if not careful, 
-            // but requirement implies registry usage for remote run.
             String finalImageName = registryPrefix + imageName;
             
-            containerExecutor.buildImageLocal(pipelineId, buildContextPath.toString(), "Dockerfile", finalImageName, tag);
+            dockerImageService.buildImage(pipelineId, buildContextPath.toString(), "Dockerfile", finalImageName, tag);
             
             // 6. Push Image to Registry
              if (registryUsername != null && !registryUsername.isBlank()) {
                 log.info("Pushing image {} to registry", finalImageName);
-                containerExecutor.pushImage(pipelineId, finalImageName, tag);
+                dockerImageService.pushImage(pipelineId, finalImageName, tag);
              } else {
                  log.warn("Registry username not set, skipping push. Remote run might fail if image is not on remote host.");
-                 containerExecutor.publishLog(pipelineId, "WARNING: Registry credentials missing. Skipping Push.");
+                 logPublisher.publish(pipelineId, "WARNING: Registry credentials missing. Skipping Push.");
              }
             
             try {

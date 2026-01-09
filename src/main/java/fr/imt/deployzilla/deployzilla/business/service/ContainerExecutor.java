@@ -19,14 +19,14 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
-import java.io.File;
+
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
+
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
-import com.github.dockerjava.api.command.BuildImageResultCallback;
+
 
 import static fr.imt.deployzilla.deployzilla.business.utils.Constants.*;
 
@@ -373,74 +373,9 @@ public class ContainerExecutor {
     }
 
     /**
-     * Build a Docker image from a directory LOCALLY.
+     * Start a container and return the container ID (without waiting for completion).
+     * Binds to Traefik reverse proxy
      */
-    public String buildImageLocal(String pipelineId, String buildContextPath, String dockerfileName, String imageName, String tag) {
-        String fullImageName = imageName + ":" + tag;
-        publishLog(pipelineId, "Starting LOCAL image build: " + fullImageName);
-
-        try {
-            return localDockerClient.buildImageCmd(new File(buildContextPath))
-                    .withDockerfile(new File(buildContextPath, dockerfileName))
-                    .withTags(Set.of(fullImageName))
-                    .withPlatform("linux/amd64")
-                    .exec(new BuildImageResultCallback() {
-                        @Override
-                        public void onNext(BuildResponseItem item) {
-                            if (item.getStream() != null) {
-                                publishLog(pipelineId, item.getStream().trim());
-                            }
-                            super.onNext(item);
-                        }
-                    })
-                    .awaitImageId();
-        } catch (Exception e) {
-            log.error("Image build failed", e);
-            publishLog(pipelineId, "Image build failed: " + e.getMessage());
-            throw new RuntimeException("Image build failed", e);
-        }
-    }
-
-    /**
-     * Push image to registry LOCALLY.
-     */
-    public void pushImage(String pipelineId, String imageName, String tag) {
-        String fullImageName = imageName + ":" + tag;
-        publishLog(pipelineId, "Pushing image to registry: " + fullImageName);
-
-        try {
-            var pushCmd = localDockerClient.pushImageCmd(fullImageName);
-
-            if (registryUsername != null && !registryUsername.isBlank()) {
-                AuthConfig authConfig = new AuthConfig()
-                        .withUsername(registryUsername)
-                        .withPassword(registryPassword);
-                pushCmd.withAuthConfig(authConfig);
-            }
-
-            pushCmd.start().awaitCompletion(timeoutSeconds, TimeUnit.SECONDS);
-            publishLog(pipelineId, "Image pushed successfully");
-
-        } catch (Exception e) {
-            log.error("Image push failed", e);
-            publishLog(pipelineId, "Image push failed: " + e.getMessage());
-            throw new RuntimeException("Image push failed", e);
-        }
-    }
-
-    /**
-     * Build a Docker image from a directory.
-     * @deprecated Use buildImageLocal instead
-     */
-    @Deprecated
-    public String buildImage(String pipelineId, String buildContextPath, String dockerfileName, String imageName, String tag) {
-        return buildImageLocal(pipelineId, buildContextPath, dockerfileName, imageName, tag);
-    }
-
-        /**
-         * Start a container and return the container ID (without waiting for completion).
-         * Binds to Traefik reverse proxy
-         */
     public String startContainer(
             String pipelineId,
             String imageName, Map<String, String> envVars,
