@@ -18,9 +18,17 @@ import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Recover;
+import org.springframework.retry.annotation.Retryable;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+
+import java.io.IOException;
+import com.github.dockerjava.api.exception.DockerException;
 
 
 import java.time.Duration;
@@ -63,6 +71,10 @@ public class ContainerExecutor {
 
     @Value("${docker.memory.limit:2147483648}")
     private long memoryLimit;
+
+    @Lazy
+    @Autowired
+    private ContainerExecutor self;
 
     private DockerClient dockerClient; // Remote (or local if remote invalid/disabled)
     private DockerClient localDockerClient; // Always Local
@@ -170,7 +182,7 @@ public class ContainerExecutor {
             containerLogStreamer.publishLog(pipelineId, String.format("Image: %s", image));
 
             // Pull image from registry if not present (LOCALLY)
-            pullImageIfNeeded(localDockerClient, pipelineId, image);
+            self.pullImageIfNeeded(localDockerClient, pipelineId, image);
 
             // Prepare labels for ownership tracking
             Map<String, String> labels = Map.of(
@@ -261,7 +273,12 @@ public class ContainerExecutor {
      * Pull image if not already present.
      * Uses configured registry credentials if provided.
      */
-    private void pullImageIfNeeded(DockerClient client, String pipelineId, String image) {
+    @Retryable(
+        retryFor = {DockerException.class, IOException.class, ImagePullException.class},
+        maxAttempts = 3,
+        backoff = @Backoff(delay = 2000, multiplier = 2)
+    )
+    public void pullImageIfNeeded(DockerClient client, String pipelineId, String image) {
         String imageToCheck = image.contains(":") ? image : image + ":latest";
 
         try {
@@ -305,7 +322,11 @@ public class ContainerExecutor {
         }
     }
 
-
+    @Recover
+    public void pullImageRecover(Exception e, DockerClient client, String pipelineId, String image) {
+        log.error("Failed to pull image after retries: {}", image, e);
+        throw new ImagePullException(image, e);
+    }
 
     /**
      * List all containers managed by Deployzilla.
@@ -351,6 +372,11 @@ public class ContainerExecutor {
      * Start a container and return the container ID (without waiting for completion).
      * Binds to Traefik reverse proxy
      */
+    @Retryable(
+        retryFor = {ContainerExecutionException.class, DockerException.class},
+        maxAttempts = 3,
+        backoff = @Backoff(delay = 2000, multiplier = 2)
+    )
     public String startContainer(
             String pipelineId,
             String imageName, Map<String, String> envVars,
@@ -360,7 +386,7 @@ public class ContainerExecutor {
             containerLogStreamer.publishLog(pipelineId, "Starting application container: " + imageName);
 
             // Pull image on the remote server (using remote dockerClient)
-            pullImageIfNeeded(dockerClient, pipelineId, imageName);
+            self.pullImageIfNeeded(dockerClient, pipelineId, imageName);
 
             // Prepare environment variables
             String[] env = envVars != null
