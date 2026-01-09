@@ -15,6 +15,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
+import com.github.dockerjava.api.exception.DockerException;
 
 import java.io.File;
 import java.time.Duration;
@@ -86,6 +89,11 @@ public class DockerImageService {
      * @param tag              Image tag (e.g., "latest")
      * @return The built image ID
      */
+    @Retryable(
+        retryFor = {DockerException.class, ImageBuildException.class},
+        maxAttempts = 3,
+        backoff = @Backoff(delay = 2000, multiplier = 2)
+    )
     public String buildImage(String pipelineId, String buildContextPath, String dockerfileName, String imageName, String tag) {
         String fullImageName = imageName + ":" + tag;
         containerLogStreamer.publishLog(pipelineId, "Starting LOCAL image build: " + fullImageName);
@@ -119,6 +127,11 @@ public class DockerImageService {
      * @param imageName  Image name (e.g., "myuser/myapp")
      * @param tag        Image tag (e.g., "latest")
      */
+    @Retryable(
+        retryFor = {DockerException.class, ImageBuildException.class},
+        maxAttempts = 3,
+        backoff = @Backoff(delay = 2000, multiplier = 2)
+    )
     public void pushImage(String pipelineId, String imageName, String tag) {
         String fullImageName = imageName + ":" + tag;
         containerLogStreamer.publishLog(pipelineId, "Pushing image to registry: " + fullImageName);
