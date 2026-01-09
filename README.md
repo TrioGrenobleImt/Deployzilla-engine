@@ -66,6 +66,13 @@ Configuration is managed via `src/main/resources/application.yml` and environmen
 | :--- | :--- | :--- |
 | `SPRING_DATA_MONGODB_URI` | MongoDB Connection URI | `mongodb://localhost:27017/deployzilla` |
 | `SPRING_DATA_REDIS_HOST` | Redis Host | `localhost` |
+| `REDIS_PASSWORD` | Redis Password | `admin` |
+| `MONGODB_URI` | MongoDB URI override | `mongodb://mongo:27017/deployzilla` |
+| `SONAR_USERNAME` | SonarQube admin username | `admin` |
+| `SONAR_PASSWORD` | SonarQube admin password | *(Required)* |
+| `SONAR_URL` | SonarQube server URL | `http://sonarqube:9000` |
+| `SONAR_DB_USER` | SonarQube DB User | `sonar` |
+| `SONAR_DB_PASSWORD` | SonarQube DB Password | `sonar` |
 | `DEPLOYZILLA_REMOTE_USER` | SSH User for remote VPS | *(Required)* |
 | `DEPLOYZILLA_REMOTE_PASSWORD`| SSH Password for remote VPS | *(Required)* |
 | `DEPLOYZILLA_REMOTE_PORT` | SSH Port for remote VPS | `22` |

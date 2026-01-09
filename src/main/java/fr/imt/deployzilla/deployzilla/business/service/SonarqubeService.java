@@ -10,6 +10,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
@@ -43,6 +45,10 @@ public class SonarqubeService {
 
     private final PipelineRepository pipelineRepository;
 
+    @Retryable(
+        maxAttempts = 3,
+        backoff = @Backoff(delay = 1000, multiplier = 2)
+    )
     public String getSonarToken() {
         String auth = sonarUsername + ":" + sonarPassword;
         String encodedAuth = Base64.getEncoder().encodeToString(auth.getBytes(StandardCharsets.UTF_8));
@@ -81,7 +87,7 @@ public class SonarqubeService {
                 Map.of("SONAR_TOKEN", token,
                         "SONAR_PROJECT_KEY", projectId,
                         "SONAR_HOST_URL", sonarUrl,
-                        "SONAE_ARGS", "-Dsonar.javascript.lcov.reportPaths=coverage/lcov.info"
+                        "SONAR_ARGS", "-Dsonar.javascript.lcov.reportPaths=coverage/lcov.info"
                 )
         );
     }

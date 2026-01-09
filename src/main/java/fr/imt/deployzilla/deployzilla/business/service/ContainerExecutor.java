@@ -1,7 +1,7 @@
 package fr.imt.deployzilla.deployzilla.business.service;
 
 import com.github.dockerjava.api.DockerClient;
-import com.github.dockerjava.api.async.ResultCallback;
+
 import com.github.dockerjava.api.command.CreateContainerResponse;
 import com.github.dockerjava.api.command.WaitContainerResultCallback;
 import com.github.dockerjava.api.model.*;
@@ -9,24 +9,35 @@ import com.github.dockerjava.core.DefaultDockerClientConfig;
 import com.github.dockerjava.core.DockerClientBuilder;
 import com.github.dockerjava.httpclient5.ApacheDockerHttpClient;
 import fr.imt.deployzilla.deployzilla.business.model.ProcessResult;
-import fr.imt.deployzilla.deployzilla.business.port.ProcessLogPublisherPort;
+
+import fr.imt.deployzilla.deployzilla.exception.ContainerExecutionException;
+import fr.imt.deployzilla.deployzilla.exception.ImagePullException;
+import fr.imt.deployzilla.deployzilla.infrastructure.docker.ContainerLogStreamer;
+import fr.imt.deployzilla.deployzilla.infrastructure.ssh.SshTunnel;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Recover;
+import org.springframework.retry.annotation.Retryable;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
-import java.io.File;
+import com.github.dockerjava.api.exception.DockerException;
+
+
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
+
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
-import com.github.dockerjava.api.command.BuildImageResultCallback;
+
 
 import static fr.imt.deployzilla.deployzilla.business.utils.Constants.*;
 
@@ -39,7 +50,9 @@ import static fr.imt.deployzilla.deployzilla.business.utils.Constants.*;
 @Slf4j
 public class ContainerExecutor {
 
-    private final ProcessLogPublisherPort processLogPublisherPort;
+
+    private final SshTunnel sshTunnel;
+    private final ContainerLogStreamer containerLogStreamer;
 
     @Value("${docker.host:unix:///var/run/docker.sock}")
     private String localDockerHost;
@@ -47,23 +60,14 @@ public class ContainerExecutor {
     @Value("${deployzilla.remote.enabled:false}")
     private boolean remoteEnabled;
 
-    @Value("${deployzilla.remote.host:localhost}")
-    private String remoteHost;
-
-    @Value("${deployzilla.remote.user:root}")
-    private String remoteUser;
-
-    @Value("${deployzilla.remote.password:}")
-    private String remotePassword; // Inject Password
-
-    @Value("${deployzilla.remote.port:22}")
-    private int remotePort;
-
     @Value("${deployzilla.docker.registry.username:}")
     private String registryUsername;
 
     @Value("${deployzilla.docker.registry.password:}")
     private String registryPassword;
+
+    @Value("${deployzilla.docker.registry.url:}")
+    private String registryUrl;
 
     @Value("${docker.timeout.seconds:600}")
     private int timeoutSeconds;
@@ -71,9 +75,12 @@ public class ContainerExecutor {
     @Value("${docker.memory.limit:2147483648}")
     private long memoryLimit;
 
+    @Lazy
+    @Autowired
+    private ContainerExecutor self;
+
     private DockerClient dockerClient; // Remote (or local if remote invalid/disabled)
     private DockerClient localDockerClient; // Always Local
-    private Process sshTunnelProcess;
 
     @PostConstruct
     public void init() {
@@ -98,14 +105,9 @@ public class ContainerExecutor {
         String finalRemoteDockerHost = localDockerHost;
 
         if (remoteEnabled) {
-            log.info("Starting SSH Tunnel to {}:{}", remoteHost, remotePort);
-            try {
-                startSshTunnel();
-                // Point Docker Client to the Local Tunnel
-                finalRemoteDockerHost = "tcp://127.0.0.1:" + TUNNEL_PORT;
-            } catch (Exception e) {
-                throw new RuntimeException("Failed to establish SSH tunnel", e);
-            }
+            sshTunnel.connect();
+            // Point Docker Client to the Local Tunnel
+            finalRemoteDockerHost = "tcp://127.0.0.1:" + sshTunnel.getLocalPort();
         }
 
         DefaultDockerClientConfig remoteConfig = DefaultDockerClientConfig.createDefaultConfigBuilder()
@@ -124,63 +126,13 @@ public class ContainerExecutor {
                 .build();
 
         log.info("Remote Docker client initialized connected to: {}", finalRemoteDockerHost);
-        log.info("Remote Config - Enabled: {}, Host: {}, Port: {}, User: {}", remoteEnabled, remoteHost, remotePort, remoteUser);
-    }
-
-    private void startSshTunnel() throws IOException, InterruptedException {
-        log.info("Starting SSH Tunnel with Password Auth...");
-
-        ProcessBuilder pb = new ProcessBuilder(
-                "sshpass", "-e",
-                "ssh",
-                "-4",
-                "-N", // No remote command (just forwarding)
-                "-L", String.format("%d:/var/run/docker.sock", TUNNEL_PORT),
-                "-p", String.valueOf(remotePort),
-                "-o", "StrictHostKeyChecking=no",     // Don't ask for confirmation
-                "-o", "UserKnownHostsFile=/dev/null", // Don't save host keys
-                "-o", "LogLevel=VERBOSE",             // <--- Enable Verbose Logs
-                String.format("%s@%s", remoteUser, remoteHost)
-        );
-
-        if (remotePassword != null && !remotePassword.isBlank()) {
-            pb.environment().put("SSHPASS", remotePassword);
-        } else {
-            throw new RuntimeException("Remote Password is required!");
-        }
-
-        // Redirect stderr to stdout so we can read both in one stream
-        pb.redirectErrorStream(true);
-
-        this.sshTunnelProcess = pb.start();
-
-        // --- NEW: Read SSH Output in a background thread ---
-        new Thread(() -> {
-            try (java.io.BufferedReader reader = new java.io.BufferedReader(
-                    new java.io.InputStreamReader(sshTunnelProcess.getInputStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    // Log every line from SSH so you can see auth errors
-                    log.warn("[SSH-TUNNEL] {}", line);
-                }
-            } catch (IOException e) {
-                // Ignore stream close errors
-            }
-        }).start();
-        // --------------------------------------------------
-
-        // Wait a bit longer to ensure connection is stable
-        Thread.sleep(3000);
-
-        if (!sshTunnelProcess.isAlive()) {
-            throw new RuntimeException("SSH Tunnel process died immediately. Check logs above for [SSH-TUNNEL] errors.");
-        }
-
-        log.info("SSH Tunnel started successfully on port {}", TUNNEL_PORT);
     }
 
     @PreDestroy
     public void cleanup() {
+        // Disconnect SSH tunnel first
+        sshTunnel.disconnect();
+        
         if (dockerClient != null) {
             try {
                 dockerClient.close();
@@ -229,11 +181,11 @@ public class ContainerExecutor {
         String containerId = null;
 
         try {
-            publishLog(pipelineId, String.format("--- Step [%s] Starting (Local) ---", stepId));
-            publishLog(pipelineId, String.format("Image: %s", image));
+            containerLogStreamer.publishLog(pipelineId, String.format("--- Step [%s] Starting (Local) ---", stepId));
+            containerLogStreamer.publishLog(pipelineId, String.format("Image: %s", image));
 
             // Pull image from registry if not present (LOCALLY)
-            pullImageIfNeeded(localDockerClient, pipelineId, image);
+            self.pullImageIfNeeded(localDockerClient, pipelineId, image);
 
             // Prepare labels for ownership tracking
             Map<String, String> labels = Map.of(
@@ -262,10 +214,7 @@ public class ContainerExecutor {
                     .withMemorySwap(memoryLimit) // Disable swap
                     .withCpuQuota(50000L)        // 50% CPU limit
                     .withCpuPeriod(100000L)
-                    .withNetworkMode("bridge") // Use bridge for local instead of deployzilla? Or assume Deployzilla network exists locally too.
-                    // Assuming host has the network, or fallback to bridge for generic steps. 
-                    // Let's keep deployzilla if user set it up, but usually bridge is safer for generic steps unless Inter-Container comm fits.
-                    // Safest for Git Clone is default.
+                    .withNetworkMode("deployzilla")
                     .withBinds(binds)
                     .withAutoRemove(false);
 
@@ -282,27 +231,27 @@ public class ContainerExecutor {
             CreateContainerResponse container = containerCmd.exec();
 
             containerId = container.getId();
-            publishLog(pipelineId, String.format("Container created: %s", containerId.substring(0, 12)));
+            containerLogStreamer.publishLog(pipelineId, String.format("Container created: %s", containerId.substring(0, 12)));
 
             // Start container
             localDockerClient.startContainerCmd(containerId).exec();
 
             // Stream logs
             StringBuilder capturedOutput = new StringBuilder();
-            streamLogs(localDockerClient, pipelineId, containerId, capturedOutput);
+            containerLogStreamer.streamLogs(localDockerClient, pipelineId, containerId, capturedOutput);
 
             // Wait for completion
             Integer exitCode = localDockerClient.waitContainerCmd(containerId)
                     .exec(new WaitContainerResultCallback())
                     .awaitStatusCode(timeoutSeconds, TimeUnit.SECONDS);
 
-            publishLog(pipelineId, String.format("--- Step [%s] Finished (Exit: %d) ---", stepId, exitCode));
+            containerLogStreamer.publishLog(pipelineId, String.format("--- Step [%s] Finished (Exit: %d) ---", stepId, exitCode));
 
             return CompletableFuture.completedFuture(new ProcessResult(exitCode, capturedOutput.toString()));
 
         } catch (Exception e) {
             log.error("Container execution failed for step {}", stepId, e);
-            publishLog(pipelineId, String.format("ERROR: %s", e.getMessage()));
+            containerLogStreamer.publishLog(pipelineId, String.format("ERROR: %s", e.getMessage()));
             return CompletableFuture.completedFuture(new ProcessResult(1, "ERROR"));
 
         } finally {
@@ -324,7 +273,12 @@ public class ContainerExecutor {
      * Pull image if not already present.
      * Uses configured registry credentials if provided.
      */
-    private void pullImageIfNeeded(DockerClient client, String pipelineId, String image) {
+    @Retryable(
+        retryFor = {DockerException.class, IOException.class, ImagePullException.class},
+        maxAttempts = 3,
+        backoff = @Backoff(delay = 2000, multiplier = 2)
+    )
+    public void pullImageIfNeeded(DockerClient client, String pipelineId, String image) {
         String imageToCheck = image.contains(":") ? image : image + ":latest";
 
         try {
@@ -339,64 +293,68 @@ public class ContainerExecutor {
                             java.util.Arrays.asList(img.getRepoTags()).contains(imageToCheck));
 
             if (!exists) {
-                publishLog(pipelineId, String.format("Pulling image: %s", imageToCheck));
+                containerLogStreamer.publishLog(pipelineId, String.format("Pulling image: %s", imageToCheck));
                 log.info("Pulling Docker image: {}", imageToCheck);
 
                 var pullCommand = client.pullImageCmd(imageToCheck);
+                boolean applyAuth = shouldApplyAuth(imageToCheck);
 
-                // Inject Registry Credentials
-                if (registryUsername != null && !registryUsername.isBlank()) {
+                if (applyAuth) {
                     log.info("Pulling Docker image with registry credentials: {}", imageToCheck);
                     AuthConfig authConfig = new AuthConfig()
-                            .withUsername(registryUsername)
-                            .withPassword(registryPassword);
+                        .withUsername(registryUsername)
+                        .withPassword(registryPassword)
+                        .withRegistryAddress(registryUrl);
                     pullCommand.withAuthConfig(authConfig);
+                    pullCommand.start().awaitCompletion(5, TimeUnit.MINUTES);
+                } else {
+                     // Try pulling anonymously first (expected for public images)
+                     log.info("Pulling Docker image without registry credentials (public/external image): {}", imageToCheck);
+                     try {
+                         tryPullAnonymous(client, imageToCheck);
+                     } catch (DockerException e) {
+                         // If failed, and we have credentials, maybe it's a private image on Hub (implicit)?
+                         if (registryUsername != null && !registryUsername.isBlank()) {
+                             log.warn("Anonymous pull failed for {}, retrying with configured credentials.", imageToCheck);
+                             containerLogStreamer.publishLog(pipelineId, "Anonymous pull failed, retrying with credentials...");
+                             
+                             // Re-create command for retry
+                             var retryPullCommand = client.pullImageCmd(imageToCheck);
+                             AuthConfig authConfig = new AuthConfig()
+                                 .withUsername(registryUsername)
+                                 .withPassword(registryPassword)
+                                 .withRegistryAddress(registryUrl);
+                             retryPullCommand.withAuthConfig(authConfig);
+                             retryPullCommand.start().awaitCompletion(5, TimeUnit.MINUTES);
+                         } else {
+                             throw e; // No credentials to retry with
+                         }
+                     }
                 }
 
-                pullCommand.start().awaitCompletion(5, TimeUnit.MINUTES);
-
-                publishLog(pipelineId, "Image pulled successfully");
+                containerLogStreamer.publishLog(pipelineId, "Image pulled successfully");
                 log.info("Successfully pulled image: {}", imageToCheck);
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new RuntimeException("Image pull interrupted", e);
+            throw new ImagePullException(imageToCheck, "pull interrupted");
         } catch (Exception e) {
             log.error("Failed to pull image: {}", imageToCheck, e);
-            publishLog(pipelineId, String.format("ERROR: Failed to pull image %s: %s", imageToCheck, e.getMessage()));
-            throw new RuntimeException("Failed to pull image: " + imageToCheck, e);
+            containerLogStreamer.publishLog(pipelineId, String.format("ERROR: Failed to pull image %s: %s", imageToCheck, e.getMessage()));
+            throw new ImagePullException(imageToCheck, e);
         }
     }
 
-    /**
-     * Stream container logs to Redis.
-     */
-    /**
-     * Stream container logs to Redis.
-     */
-    private void streamLogs(DockerClient client, String pipelineId, String containerId, StringBuilder outputBuffer) {
-        try {
-            client.logContainerCmd(containerId)
-                    .withStdOut(true)
-                    .withStdErr(true)
-                    .withFollowStream(true)
-                    .exec(new ResultCallback.Adapter<Frame>() {
-                        @Override
-                        public void onNext(Frame frame) {
-                            String logLine = new String(frame.getPayload()).trim();
-                            if (!logLine.isEmpty()) {
-                                publishLog(pipelineId, logLine);
-                                if (StreamType.STDOUT.equals(frame.getStreamType())) {
-                                    outputBuffer.append(logLine).append("\n");
-                                }
-                            }
-                        }
-                    })
-                    .awaitCompletion(timeoutSeconds, TimeUnit.SECONDS);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            log.warn("Log streaming interrupted for container {}", containerId);
-        }
+    private void tryPullAnonymous(DockerClient client, String image) throws InterruptedException {
+        client.pullImageCmd(image)
+                .start()
+                .awaitCompletion(5, TimeUnit.MINUTES);
+    }
+
+    @Recover
+    public void pullImageRecover(Exception e, DockerClient client, String pipelineId, String image) {
+        log.error("Failed to pull image after retries: {}", image, e);
+        throw new ImagePullException(image, e);
     }
 
     /**
@@ -440,84 +398,24 @@ public class ContainerExecutor {
     }
 
     /**
-     * Build a Docker image from a directory LOCALLY.
+     * Start a container and return the container ID (without waiting for completion).
+     * Binds to Traefik reverse proxy
      */
-    public String buildImageLocal(String pipelineId, String buildContextPath, String dockerfileName, String imageName, String tag) {
-        String fullImageName = imageName + ":" + tag;
-        publishLog(pipelineId, "Starting LOCAL image build: " + fullImageName);
-
-        try {
-            return localDockerClient.buildImageCmd(new File(buildContextPath))
-                    .withDockerfile(new File(buildContextPath, dockerfileName))
-                    .withTags(Set.of(fullImageName))
-                    .withPlatform("linux/amd64")
-                    .exec(new BuildImageResultCallback() {
-                        @Override
-                        public void onNext(BuildResponseItem item) {
-                            if (item.getStream() != null) {
-                                publishLog(pipelineId, item.getStream().trim());
-                            }
-                            super.onNext(item);
-                        }
-                    })
-                    .awaitImageId();
-        } catch (Exception e) {
-            log.error("Image build failed", e);
-            publishLog(pipelineId, "Image build failed: " + e.getMessage());
-            throw new RuntimeException("Image build failed", e);
-        }
-    }
-
-    /**
-     * Push image to registry LOCALLY.
-     */
-    public void pushImage(String pipelineId, String imageName, String tag) {
-        String fullImageName = imageName + ":" + tag;
-        publishLog(pipelineId, "Pushing image to registry: " + fullImageName);
-
-        try {
-            var pushCmd = localDockerClient.pushImageCmd(fullImageName);
-
-            if (registryUsername != null && !registryUsername.isBlank()) {
-                AuthConfig authConfig = new AuthConfig()
-                        .withUsername(registryUsername)
-                        .withPassword(registryPassword);
-                pushCmd.withAuthConfig(authConfig);
-            }
-
-            pushCmd.start().awaitCompletion(timeoutSeconds, TimeUnit.SECONDS);
-            publishLog(pipelineId, "Image pushed successfully");
-
-        } catch (Exception e) {
-            log.error("Image push failed", e);
-            publishLog(pipelineId, "Image push failed: " + e.getMessage());
-            throw new RuntimeException("Image push failed", e);
-        }
-    }
-
-    /**
-     * Build a Docker image from a directory.
-     * @deprecated Use buildImageLocal instead
-     */
-    @Deprecated
-    public String buildImage(String pipelineId, String buildContextPath, String dockerfileName, String imageName, String tag) {
-        return buildImageLocal(pipelineId, buildContextPath, dockerfileName, imageName, tag);
-    }
-
-        /**
-         * Start a container and return the container ID (without waiting for completion).
-         * Binds to Traefik reverse proxy
-         */
+    @Retryable(
+        retryFor = {ContainerExecutionException.class, DockerException.class},
+        maxAttempts = 3,
+        backoff = @Backoff(delay = 2000, multiplier = 2)
+    )
     public String startContainer(
             String pipelineId,
             String imageName, Map<String, String> envVars,
             Map<String, String> labels) {
         String containerId;
         try {
-            publishLog(pipelineId, "Starting application container: " + imageName);
+            containerLogStreamer.publishLog(pipelineId, "Starting application container: " + imageName);
 
             // Pull image on the remote server (using remote dockerClient)
-            pullImageIfNeeded(dockerClient, pipelineId, imageName);
+            self.pullImageIfNeeded(dockerClient, pipelineId, imageName);
 
             // Prepare environment variables
             String[] env = envVars != null
@@ -548,49 +446,46 @@ public class ContainerExecutor {
             
             log.info("Application container started: " + containerId.substring(0, 12));
 
-            publishLog(pipelineId, "Application container started: " + containerId.substring(0, 12));
+            containerLogStreamer.publishLog(pipelineId, "Application container started: " + containerId.substring(0, 12));
             
             // Monitor logs in background
-            monitorContainerLogs(dockerClient, pipelineId, containerId);
+            containerLogStreamer.monitorAsync(dockerClient, pipelineId, containerId);
             
             return containerId;
 
         } catch (Exception e) {
             log.error("Failed to start application container", e);
-            publishLog(pipelineId, "Failed to start container: " + e.getMessage());
-            throw new RuntimeException("Failed to start container", e);
+            containerLogStreamer.publishLog(pipelineId, "Failed to start container: " + e.getMessage());
+            throw new ContainerExecutionException(imageName, "start", e);
         }
     }
 
-    /**
-     * Monitors container logs in a background thread.
-     * Useful for long-running containers where we want to see startup logs.
-     */
-    private void monitorContainerLogs(DockerClient client, String pipelineId, String containerId) {
-        CompletableFuture.runAsync(() -> {
-            try {
-                client.logContainerCmd(containerId)
-                        .withStdOut(true)
-                        .withStdErr(true)
-                        .withFollowStream(true)
-                        .exec(new ResultCallback.Adapter<Frame>() {
-                            @Override
-                            public void onNext(Frame frame) {
-                                String logLine = new String(frame.getPayload()).trim();
-                                if (!logLine.isEmpty()) {
-                                    publishLog(pipelineId, "[" + containerId.substring(0, 8) + "] " + logLine);
-                                }
-                            }
-                        })
-                        .awaitCompletion(); // Blocks the async thread until container stops or connection closes
-            } catch (Exception e) {
-                log.warn("Stopped monitoring logs for container {}", containerId);
-            }
-        });
-    }
+    private boolean shouldApplyAuth(String image) {
+        if (registryUsername == null || registryUsername.isBlank()) {
+            return false;
+        }
+        if (registryUrl == null || registryUrl.isBlank()) {
+            // Unclear config, fallback to anonymous first then retry
+            return false; 
+        }
 
-    public void publishLog(String pipelineId, String message) {
-        processLogPublisherPort.publish(pipelineId, message);
+        // Clean registry URL to get host
+        String registryHost = registryUrl
+                .replace("https://", "")
+                .replace("http://", "");
+        
+        if (registryHost.contains("/")) {
+            registryHost = registryHost.substring(0, registryHost.indexOf("/"));
+        }
+
+        // 1. If image explicitly starts with registry host, definitely apply.
+        if (image.startsWith(registryHost)) {
+            return true;
+        }
+
+        // 2. Strict check: If it doesn't match, DON'T apply auth initially.
+        // We rely on the fallback retry logic for implicit Docker Hub images.
+        return false;
     }
 
 }

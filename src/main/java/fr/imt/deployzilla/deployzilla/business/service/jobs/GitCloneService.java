@@ -8,6 +8,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -27,7 +29,7 @@ import java.util.concurrent.CompletableFuture;
 public class GitCloneService {
 
     // Custom image name - implies it must be built tagged as such
-    private static final String GIT_IMAGE = "piryth/deployzilla-step-git-clone:latest";
+    private static final String GIT_IMAGE = "deployzilla/step:git-clone";
 
     // Container mount paths
     private static final String CONTAINER_WORKSPACE_PATH = "/workspace";
@@ -65,6 +67,11 @@ public class GitCloneService {
      * @param targetDir  Directory name within workspace (relative to workspace root)
      * @return CompletableFuture with exit code (0 = success)
      */
+    @Retryable(
+        retryFor = {IOException.class},
+        maxAttempts = 3,
+        backoff = @Backoff(delay = 2000, multiplier = 2)
+    )
     public CompletableFuture<ProcessResult> execute(
             String pipelineId,
             Project project,
