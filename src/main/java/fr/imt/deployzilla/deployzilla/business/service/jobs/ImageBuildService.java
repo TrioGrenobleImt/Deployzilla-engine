@@ -26,6 +26,9 @@ public class ImageBuildService {
     @Value("${deployzilla.workspace.local.path:/workspaces}")
     private String workspaceLocalPath;
 
+    @Value("${deployzilla.docker.registry.username:}")
+    private String registryUsername;
+
     public CompletableFuture<ProcessResult> execute(String pipelineId, String projectDir, String gitUrl) {
         String sanitizedDir = DirectorySanitizer.sanitizeDirectoryName(projectDir);
         String hostProjectPath = workspacePath + "/" + pipelineId + "/" + sanitizedDir;
@@ -62,8 +65,22 @@ public class ImageBuildService {
             containerExecutor.publishLog(pipelineId, "Writing Dockerfile to " + dockerfilePath);
             Files.writeString(dockerfilePath, dockerfileContent);
             
-            // 5. Build Image
-            containerExecutor.buildImage(pipelineId, buildContextPath.toString(), "Dockerfile", imageName, tag);
+            // 5. Build Image LOCALLY
+            String registryPrefix = (registryUsername != null && !registryUsername.isBlank()) ? registryUsername + "/" : "";
+            // If registry is used, prepend it. If not, standard naming for local run might fail if not careful, 
+            // but requirement implies registry usage for remote run.
+            String finalImageName = registryPrefix + imageName;
+            
+            containerExecutor.buildImageLocal(pipelineId, buildContextPath.toString(), "Dockerfile", finalImageName, tag);
+            
+            // 6. Push Image to Registry
+             if (registryUsername != null && !registryUsername.isBlank()) {
+                log.info("Pushing image {} to registry", finalImageName);
+                containerExecutor.pushImage(pipelineId, finalImageName, tag);
+             } else {
+                 log.warn("Registry username not set, skipping push. Remote run might fail if image is not on remote host.");
+                 containerExecutor.publishLog(pipelineId, "WARNING: Registry credentials missing. Skipping Push.");
+             }
             
             try {
                 FileSystemUtils.deleteRecursively(buildContextPath);
@@ -85,7 +102,7 @@ public class ImageBuildService {
         } else if (Files.exists(projectPath.resolve("pnpm-lock.yaml"))) {
             return "pnpm";
         } else {
-            return "npm";
+            return "pnpm";
         }
     }
 
@@ -101,12 +118,12 @@ public class ImageBuildService {
 
         return """
                 # Stage 1: Clone
-                FROM alpine/git AS source
+                FROM --platform=linux/amd64 alpine/git:v2.47.1 AS source
                 WORKDIR /src
                 RUN git clone %s .
 
                 # Stage 2: Build
-                FROM node:22-alpine
+                FROM --platform=linux/amd64 node:24-alpine
                 WORKDIR /app
                 COPY --from=source /src .
                 

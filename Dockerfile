@@ -7,7 +7,7 @@ RUN mvn clean package -DskipTests
 
 # Run stage
 FROM eclipse-temurin:21-jre-alpine
-RUN apk add --no-cache bash
+RUN apk add --no-cache bash openssh-client sshpass
 WORKDIR /app
 COPY --from=build /app/target/*.jar app.jar
 EXPOSE 8081

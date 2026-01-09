@@ -1,9 +1,0 @@
----
-pipeline:
-  - clone:
-      projectId: ""
-  - sonar:
-      apiKey: ""
-  - build:
-      environment:
-        - var1: test

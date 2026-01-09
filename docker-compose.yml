@@ -14,6 +14,11 @@ services:
       - DEPLOYZILLA_WORKSPACE_PATH=${PWD}/deployzilla-workspaces
       - DEPLOYZILLA_WORKSPACE_LOCAL_PATH=/workspaces
       - DEPLOYZILLA_KEYS_PATH=${PWD}/deployzilla-keys
+      - DEPLOYZILLA_REMOTE_PORT=2233
+      - DEPLOYZILLA_REMOTE_USER=deployzilla
+      - DEPLOYZILLA_REMOTE_PASSWORD=<REMOTE_PASSWORD>
+      - DOCKER_REGISTRY_USER=piryth
+      - DOCKER_REGISTRY_PASSWORD=<DOCKER_REGISTRY_PASSWORD>
     volumes:
       # Bind mount host directories (spawned containers can access these)
       - ./deployzilla-workspaces:/workspaces
@@ -44,16 +49,16 @@ services:
       SECRETS: 0
       SWARM: 0
       COMMIT: 0
-      CONFIGS: 0
-      DISTRIBUTION: 0
-      EXEC: 0
-      GRPC: 0
-      NODES: 0
-      PLUGINS: 0
-      SERVICES: 0
-      SESSION: 0
-      SYSTEM: 0
-      TASKS: 0
+      #CONFIGS: 0
+      #DISTRIBUTION: 0
+      #EXEC: 0
+      #GRPC: 0
+      #NODES: 0
+      #PLUGINS: 0
+      #SERVICES: 0
+      #SESSION: 0
+      #SYSTEM: 0
+      #TASKS: 0
     networks:
       - deployzilla
 
@@ -155,14 +160,14 @@ services:
       - deployzilla
       - sonarnet
 
-  # step-sonarqube-analysis:
-  #   image: deployzilla/step:sonarqube
-  #   build:
-  #     context: ./src/main/resources/docker
-  #     target: sonarqube
-  #   entrypoint: [ "true" ]
-  #   networks:
-  #     - deployzilla
+  step-sonarqube-analysis:
+     image: deployzilla/step:sonarqube
+     build:
+       context: ./src/main/resources/docker
+       target: sonarqube
+     entrypoint: [ "true" ]
+     networks:
+       - deployzilla
 
 networks:
   sonarnet:

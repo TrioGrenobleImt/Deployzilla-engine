@@ -143,6 +143,8 @@ public class JobService {
         Map<String, String> envVars = project.getEnvVars().stream()
                 .collect(Collectors.toMap(EnvVar::getKey, EnvVar::getValue));
 
+        log.info("Running app with environment variables: {}", envVars.toString());
+
         try {
             return appRunService.execute(pipelineId, envVars).get();
         } catch (InterruptedException | ExecutionException e) {
